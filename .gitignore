@@ -1,0 +1,11 @@
+.dart_tool/
+.idea/
+.vscode/
+.DS_store
+.packages
+build/
+doc/api/
+pubspec.lock
+**/**.aot
+**/**.exe
+**/**.jit
