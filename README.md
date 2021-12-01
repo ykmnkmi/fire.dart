@@ -39,7 +39,7 @@ void main() {
   print('hello cat!');
 }
 
-> press r to restart, q to exit.
+> press r to restart and q to exit.
 ```
 
 While running creates `bin/cat.dill` incremental kernel snapshot.

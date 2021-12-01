@@ -100,7 +100,7 @@ Future<void> main(List<String> arguments) async {
 
   run();
 
-  stdout.writeln('> press r to restart, q to exit.');
+  stdout.writeln('> press r to restart and q to exit.');
 
   stdin.echoMode = false;
   stdin.lineMode = false;
