@@ -10,12 +10,10 @@ const String kernel = 'lib/_internal/vm_platform_strong.dill';
 
 late final String dartExecutable = path.normalize(Platform.resolvedExecutable);
 late final String sdkDir = path.dirname(path.dirname(dartExecutable));
-late final String frontendServerPath =
-    path.join(sdkDir, 'bin', 'snapshots', 'frontend_server.dart.snapshot');
 
 Future<void> main(List<String> arguments) async {
   if (arguments.isEmpty) {
-    stdout.writeln('> usage: fire path-to-dart-file [arguments].');
+    stdout.writeln('> usage: fire file.dart [arguments].');
     exit(1);
   }
 

@@ -4,13 +4,13 @@ version: 1.0.0
 repository: https://github.com/ykmnkmi/fire.dart
 
 environment:
-  sdk: '>=2.15.0 <3.0.0'
+  sdk: '>=2.14.0 <3.0.0'
 
 dependencies:
-  frontend_server_client: ^2.1.2
+  frontend_server_client: ^2.1.0
   path: ^1.8.0
   stack_trace: ^1.10.0
-  watcher: ^1.0.1
+  watcher: ^1.0.0
 
 dev_dependencies:
   lints: ^1.0.0
