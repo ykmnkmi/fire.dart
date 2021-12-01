@@ -5,7 +5,7 @@ Hot restart for console application.
 
 ## Why I need this?
 
-If your console application compiles too long before running. And `dart run`, which is now supports incremental compilation, seems too slow.
+If your console application compiles too long before running, and `dart run`, which is now supports incremental compilation, seems too slow.
 
 ## Install
 
