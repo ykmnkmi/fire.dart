@@ -1,7 +1,7 @@
 [![Pub Package](https://img.shields.io/pub/v/fire.svg)](https://pub.dev/packages/fire)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Hot restart for console application.
+Hot restart for Dart console application.
 
 ## Why I need this?
 

@@ -1,5 +1,5 @@
 name: fire
-description: Incremental build and run executable with given arguments.
+description: Hot restart for Dart console application.
 version: 1.0.0
 repository: https://github.com/ykmnkmi/fire.dart
 
