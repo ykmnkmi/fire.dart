@@ -1,9 +1,9 @@
 [![Pub Package](https://img.shields.io/pub/v/fire.svg)](https://pub.dev/packages/fire)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Hot restart for Dart console application.
+Hot restart for Dart console application with fast incremental compilation.
 
-## Why I need this?
+## Why do I need this?
 
 If your console application compiles too long before running, and `dart run`, which is now supports incremental compilation, seems too slow.
 
