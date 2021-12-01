@@ -12,7 +12,7 @@ If your console application compiles too long before running. And `dart run`, wh
 Use the dart pub global command to install this into your system.
 
 ```console
-dart pub global activate fire
+$ dart pub global activate fire
 ```
 
 ## Use
