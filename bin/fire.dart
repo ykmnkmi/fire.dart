@@ -18,12 +18,25 @@ Future<void> main(List<String> arguments) async {
   }
 
   var filePath = arguments[0];
-  var fileUri = Uri.file(filePath);
+  var fileUri = path.toUri(filePath);
+
+  if (!FileSystemEntity.isFileSync(filePath)) {
+    stdout.writeln('\'$filePath\' not found or is\'n a file.');
+    exit(2);
+  }
 
   var output = path.setExtension(filePath, '.dill');
   arguments[0] = output;
 
-  var client = await FrontendServerClient.start(filePath, output, kernel);
+  FrontendServerClient client;
+
+  try {
+    client = await FrontendServerClient.start(filePath, output, kernel);
+  } catch (error, stackTrace) {
+    stdout.writeln(error);
+    stdout.writeln(Trace.format(stackTrace));
+    exit(3);
+  }
 
   var invalidated = <Uri>{};
 
@@ -32,7 +45,7 @@ Future<void> main(List<String> arguments) async {
 
     watcher.events.listen((event) {
       stdout.writeln(event);
-      invalidated.add(Uri.file(event.path));
+      invalidated.add(path.toUri(event.path));
     });
 
     return watcher.ready;
@@ -49,6 +62,7 @@ Future<void> main(List<String> arguments) async {
       invalidated.clear();
 
       if (result == null) {
+        stdout.writeln();
         stdout.writeln('> no compilation result, rejecting.');
         return client.reject();
       }

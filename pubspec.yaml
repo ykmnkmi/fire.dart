@@ -1,6 +1,6 @@
 name: fire
 description: Hot restart for Dart console application.
-version: 1.0.0
+version: 1.0.1
 repository: https://github.com/ykmnkmi/fire.dart
 
 environment:
