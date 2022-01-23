@@ -34,7 +34,7 @@ Here's an example of running a console application:
 ```console
 $ fire bin/cat.dart example/example.dart
 > watching 'lib' folder.
-> building done, took 0:00:00.000054
+> compiling done, took 0:00:00.000054
 void main() {
   print('hello cat!');
 }

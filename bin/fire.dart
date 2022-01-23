@@ -40,7 +40,7 @@ Future<void> main(List<String> arguments) async {
 
   var invalidated = <Uri>{};
 
-  Future<void> watch(Set<Uri> invalidated, [Duration? pollingDelay]) {
+  Future<void> watch(Set<Uri> invalidated) {
     var watcher = Watcher('lib');
 
     watcher.events.listen((event) {
@@ -84,9 +84,9 @@ Future<void> main(List<String> arguments) async {
     }
   }
 
-  void run() {
+  Future<void> run() async {
     try {
-      var result = Process.runSync(dartExecutable, arguments);
+      var result = await Process.run(dartExecutable, arguments);
 
       if (result.stdout != null) {
         stdout.writeln(result.stdout.toString().trimRight());
@@ -102,16 +102,13 @@ Future<void> main(List<String> arguments) async {
   }
 
   var stopwatch = Stopwatch();
-
-  stdout.write('> building...');
+  stdout.write('> compiling...');
   stopwatch.start();
   await reload();
   stopwatch.stop();
-  stdout.writeln('\r> building done, took ${stopwatch.elapsed}');
+  stdout.writeln('\r> compiling done, took ${stopwatch.elapsed}');
   stopwatch.reset();
-
-  run();
-
+  await run();
   stdout.writeln('> press r to restart and q to exit.');
 
   stdin.echoMode = false;
@@ -120,19 +117,20 @@ Future<void> main(List<String> arguments) async {
   await for (var bytes in stdin) {
     switch (bytes[0]) {
       case 114:
-        stdout.write('> reloading...');
+        stdout.write('> restarting...');
         stopwatch.start();
         await reload();
         stopwatch.stop();
-        stdout.writeln('\r> reloading done, took ${stopwatch.elapsed}');
+        stdout.writeln('\r> done, took ${stopwatch.elapsed}');
         stopwatch.reset();
-        run();
+        await run();
         break;
       case 113:
-        await client.shutdown().then<Never>(exit);
+        var exitCode = await client.shutdown();
+        exit(exitCode);
       default:
         var input = String.fromCharCodes(bytes);
-        stdout.writeln('> expected r to reload and q to exit, got \'$input\'.');
+        stdout.writeln('> expected r to restart and q to exit, got \'$input\'.');
     }
   }
 }
