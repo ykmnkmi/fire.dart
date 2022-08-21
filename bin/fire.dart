@@ -1,4 +1,4 @@
-import 'dart:io' show FileSystemEntity, Platform, Process, exit, stdin, stdout;
+import 'dart:io' show Directory, File, FileSystemEntity, Platform, Process, exit, stdin, stdout;
 
 import 'package:frontend_server_client/frontend_server_client.dart'
     show FrontendServerClient;
@@ -31,7 +31,16 @@ Future<void> main(List<String> arguments) async {
   FrontendServerClient client;
 
   try {
-    client = await FrontendServerClient.start(filePath, output, kernel);
+    client = await FrontendServerClient.start(
+      filePath,
+      output,
+      kernel,
+      packagesJson: _findPackageConfig(
+        File(
+          filePath,
+        ),
+      ),
+    );
   } catch (error, stackTrace) {
     stdout.writeln(error);
     stdout.writeln(Trace.format(stackTrace));
@@ -131,6 +140,42 @@ Future<void> main(List<String> arguments) async {
       default:
         var input = String.fromCharCodes(bytes);
         stdout.writeln('> expected r to restart and q to exit, got \'$input\'.');
+    }
+  }
+}
+
+String _findPackageConfig(File file) {
+  // This constant was taken from `FrontendServerClient.start`s
+  // packageJson parameters default value.
+  const target = '.dart_tool/package_config.json';
+  // Start out at the directive where the given file is contained.
+  Directory current = file.parent.absolute;
+  for(;;) {
+    // Construct a candidate where the file we are looking for could be.
+    final candidate = File(
+      path.join(
+        current.path,
+        target,
+      ),
+    );
+    final fileFound = candidate.existsSync();
+    if (fileFound) {
+      // If the file has been found, return its path.
+      return candidate.absolute.path;
+    } else {
+      // The file has not been found.
+      // Walk up the current directory until
+      // the root directory has been reached
+      final parent = current.parent;
+      final rootDirectoryReached = current == parent;
+      if (rootDirectoryReached) {
+        // package_config not found.
+        return target;
+      } else {
+        // Go to the parent until the
+        // rootDirectory has been reached.
+        current = parent;
+      }
     }
   }
 }
