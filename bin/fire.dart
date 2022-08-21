@@ -1,4 +1,4 @@
-import 'dart:io' show Directory, File, FileSystemEntity, Platform, Process, exit, stdin, stdout;
+import 'dart:io' show Directory, File, FileSystemEntity, Platform, Process, StdinException, exit, stdin, stdout;
 
 import 'package:frontend_server_client/frontend_server_client.dart'
     show FrontendServerClient;
@@ -119,10 +119,15 @@ Future<void> main(List<String> arguments) async {
   stopwatch.reset();
   await run();
   stdout.writeln('> press r to restart and q to exit.');
-
-  stdin.echoMode = false;
-  stdin.lineMode = false;
-
+  try {
+    stdin.echoMode = false;
+    stdin.lineMode = false;
+  } on StdinException {
+    // This exception is thrown when run via the intellij UI:
+    // 'OS Error: Inappropriate ioctl for device, errno = 25'
+    // We ignore this for now as disabling echoMode and lineMode
+    // is 'nice to have' but not necessary.
+  }
   await for (var bytes in stdin) {
     switch (bytes[0]) {
       case 114:
