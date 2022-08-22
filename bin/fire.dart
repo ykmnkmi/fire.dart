@@ -4,7 +4,7 @@ import 'package:frontend_server_client/frontend_server_client.dart'
     show FrontendServerClient;
 import 'package:path/path.dart' as path;
 import 'package:stack_trace/stack_trace.dart' show Trace;
-import 'package:watcher/watcher.dart' show Watcher;
+import 'package:watcher/watcher.dart' show DirectoryWatcher;
 
 const String kernel = 'lib/_internal/vm_platform_strong.dill';
 
@@ -30,16 +30,20 @@ Future<void> main(List<String> arguments) async {
 
   FrontendServerClient client;
 
+  final root = _find(
+    file: File(
+      filePath,
+    ),
+    // This constant was taken from `FrontendServerClient.start`s
+    // packageJson parameters default value.
+    target: '.dart_tool/package_config.json',
+  );
   try {
     client = await FrontendServerClient.start(
       filePath,
       output,
       kernel,
-      packagesJson: _findPackageConfig(
-        File(
-          filePath,
-        ),
-      ),
+      packagesJson: root.target,
     );
   } catch (error, stackTrace) {
     stdout.writeln(error);
@@ -49,8 +53,8 @@ Future<void> main(List<String> arguments) async {
 
   var invalidated = <Uri>{};
 
-  Future<void> watch(Set<Uri> invalidated) {
-    var watcher = Watcher('lib');
+  Future<void> watch(Set<Uri> invalidated, Directory dir) {
+    var watcher = DirectoryWatcher(dir.absolute.path);
 
     watcher.events.listen((event) {
       stdout.writeln(event);
@@ -59,10 +63,14 @@ Future<void> main(List<String> arguments) async {
 
     return watcher.ready;
   }
-
-  if (FileSystemEntity.isDirectorySync('lib')) {
-    await watch(invalidated);
+  // We assume that the lib directory can be found in
+  // the directory where .dart_tool directory was found.
+  final libDirectory = Directory(path.join(root.root.path, "lib"));
+  if (libDirectory.existsSync()) {
+    await watch(invalidated, libDirectory);
     stdout.writeln('> watching lib folder.');
+  } else {
+    stdout.writeln('> not watching the lib folder because it does not exist.');
   }
 
   Future<void> reload() async {
@@ -149,10 +157,10 @@ Future<void> main(List<String> arguments) async {
   }
 }
 
-String _findPackageConfig(File file) {
-  // This constant was taken from `FrontendServerClient.start`s
-  // packageJson parameters default value.
-  const target = '.dart_tool/package_config.json';
+_DiscoveredRoot _find({
+  required File file,
+  required String target,
+}) {
   // Start out at the directive where the given file is contained.
   Directory current = file.parent.absolute;
   for(;;) {
@@ -166,7 +174,10 @@ String _findPackageConfig(File file) {
     final fileFound = candidate.existsSync();
     if (fileFound) {
       // If the file has been found, return its path.
-      return candidate.absolute.path;
+      return _DiscoveredRoot(
+        target: candidate.absolute.path,
+        root: current.absolute,
+      );
     } else {
       // The file has not been found.
       // Walk up the current directory until
@@ -175,7 +186,10 @@ String _findPackageConfig(File file) {
       final rootDirectoryReached = current == parent;
       if (rootDirectoryReached) {
         // package_config not found.
-        return target;
+        return _DiscoveredRoot(
+          target: target,
+          root: current.absolute,
+        );
       } else {
         // Go to the parent until the
         // rootDirectory has been reached.
@@ -185,4 +199,13 @@ String _findPackageConfig(File file) {
   }
 }
 
+class _DiscoveredRoot {
+  final String target;
+  final Directory root;
+
+  const _DiscoveredRoot({
+    required this.target,
+    required this.root,
+  });
+}
 // ignore_for_file: avoid_print
