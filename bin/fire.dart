@@ -1,4 +1,14 @@
-import 'dart:io' show Directory, File, FileSystemEntity, Platform, Process, StdinException, exit, stdin, stdout;
+import 'dart:io'
+    show
+        Directory,
+        File,
+        FileSystemEntity,
+        Platform,
+        Process,
+        StdinException,
+        exit,
+        stdin,
+        stdout;
 
 import 'package:frontend_server_client/frontend_server_client.dart'
     show FrontendServerClient;
@@ -8,8 +18,8 @@ import 'package:watcher/watcher.dart' show DirectoryWatcher;
 
 const String kernel = 'lib/_internal/vm_platform_strong.dill';
 
-late final String dartExecutable = path.normalize(Platform.resolvedExecutable);
-late final String sdkDir = path.dirname(path.dirname(dartExecutable));
+final String dartExecutable = path.normalize(Platform.resolvedExecutable);
+final String sdkDir = path.dirname(path.dirname(dartExecutable));
 
 Future<void> main(List<String> arguments) async {
   if (arguments.isEmpty) {
@@ -17,15 +27,15 @@ Future<void> main(List<String> arguments) async {
     exit(1);
   }
 
-  var filePath = arguments[0];
-  var fileUri = path.toUri(filePath);
+  final filePath = arguments[0];
+  final fileUri = path.toUri(filePath);
 
   if (!FileSystemEntity.isFileSync(filePath)) {
     stdout.writeln('\'$filePath\' not found or is\'n a file.');
     exit(2);
   }
 
-  var output = path.setExtension(filePath, '.dill');
+  final output = path.setExtension(filePath, '.dill');
   arguments[0] = output;
 
   FrontendServerClient client;
@@ -51,10 +61,10 @@ Future<void> main(List<String> arguments) async {
     exit(3);
   }
 
-  var invalidated = <Uri>{};
+  final invalidated = <Uri>{};
 
   Future<void> watch(Set<Uri> invalidated, Directory dir) {
-    var watcher = DirectoryWatcher(dir.absolute.path);
+    final watcher = DirectoryWatcher(dir.absolute.path);
 
     watcher.events.listen((event) {
       stdout.writeln(event);
@@ -63,9 +73,10 @@ Future<void> main(List<String> arguments) async {
 
     return watcher.ready;
   }
+
   // We assume that the lib directory can be found in
   // the directory where .dart_tool directory was found.
-  final libDirectory = Directory(path.join(root.root.path, "lib"));
+  final libDirectory = Directory(path.join(root.root.path, 'lib'));
   if (libDirectory.existsSync()) {
     await watch(invalidated, libDirectory);
     stdout.writeln('> watching lib folder.');
@@ -75,10 +86,10 @@ Future<void> main(List<String> arguments) async {
 
   Future<void> reload() async {
     try {
-      var result = await client.compile(<Uri>[fileUri, ...invalidated]);
+      final result = await client.compile(<Uri>[fileUri, ...invalidated]);
       invalidated.clear();
 
-      if (result == null) {
+      if (result.dillOutput == null) {
         stdout.writeln();
         stdout.writeln('> no compilation result, rejecting.');
         return client.reject();
@@ -89,7 +100,7 @@ Future<void> main(List<String> arguments) async {
         return client.reject();
       }
 
-      for (var line in result.compilerOutputLines) {
+      for (final line in result.compilerOutputLines) {
         stdout.writeln(line);
       }
 
@@ -103,7 +114,7 @@ Future<void> main(List<String> arguments) async {
 
   Future<void> run() async {
     try {
-      var result = await Process.run(dartExecutable, arguments);
+      final result = await Process.run(dartExecutable, arguments);
 
       if (result.stdout != null) {
         stdout.writeln(result.stdout.toString().trimRight());
@@ -118,7 +129,7 @@ Future<void> main(List<String> arguments) async {
     }
   }
 
-  var stopwatch = Stopwatch();
+  final stopwatch = Stopwatch();
   stdout.write('> compiling...');
   stopwatch.start();
   await reload();
@@ -136,7 +147,7 @@ Future<void> main(List<String> arguments) async {
     // We ignore this for now as disabling echoMode and lineMode
     // is 'nice to have' but not necessary.
   }
-  await for (var bytes in stdin) {
+  await for (final bytes in stdin) {
     switch (bytes[0]) {
       case 114:
         stdout.write('> restarting...');
@@ -148,11 +159,12 @@ Future<void> main(List<String> arguments) async {
         await run();
         break;
       case 113:
-        var exitCode = await client.shutdown();
+        final exitCode = await client.shutdown();
         exit(exitCode);
       default:
-        var input = String.fromCharCodes(bytes);
-        stdout.writeln('> expected r to restart and q to exit, got \'$input\'.');
+        final input = String.fromCharCodes(bytes);
+        stdout
+            .writeln('> expected r to restart and q to exit, got \'$input\'.');
     }
   }
 }
@@ -163,7 +175,7 @@ _DiscoveredRoot _find({
 }) {
   // Start out at the directive where the given file is contained.
   Directory current = file.parent.absolute;
-  for(;;) {
+  for (;;) {
     // Construct a candidate where the file we are looking for could be.
     final candidate = File(
       path.join(

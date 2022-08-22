@@ -46,8 +46,9 @@ While running creates `bin/cat.dill` incremental kernel snapshot.
 
 ## ToDo
 
-* Option to change arguments
-* Builders support
+* Add `args` package and more options
+* Hot reload with Flutter like `reassemble`
+* `build_runner` integration (if possible)
 * AOT compilation, [it's impossible for now](https://github.com/dart-lang/sdk/issues/47322)
 
 ## Alternatives
