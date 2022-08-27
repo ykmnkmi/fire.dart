@@ -9,3 +9,4 @@ pubspec.lock
 **/**.aot
 **/**.exe
 **/**.jit
+**/**.dill

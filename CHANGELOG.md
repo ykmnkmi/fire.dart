@@ -1,3 +1,7 @@
+## 1.2.1
+
+- Meta update
+
 ## 1.2.0
 
 - Bump minimal SDK version to 2.17.

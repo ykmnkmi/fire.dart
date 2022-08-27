@@ -1,6 +1,6 @@
 name: fire
 description: Hot restart for Dart console application with fast incremental compilation.
-version: 1.2.0
+version: 1.2.1
 repository: https://github.com/ykmnkmi/fire.dart
 
 environment:

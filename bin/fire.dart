@@ -41,13 +41,12 @@ Future<void> main(List<String> arguments) async {
   FrontendServerClient client;
 
   final root = _find(
-    file: File(
-      filePath,
-    ),
+    file: File(filePath),
     // This constant was taken from `FrontendServerClient.start`s
     // packageJson parameters default value.
     target: '.dart_tool/package_config.json',
   );
+
   try {
     client = await FrontendServerClient.start(
       filePath,
@@ -77,6 +76,7 @@ Future<void> main(List<String> arguments) async {
   // We assume that the lib directory can be found in
   // the directory where .dart_tool directory was found.
   final libDirectory = Directory(path.join(root.root.path, 'lib'));
+
   if (libDirectory.existsSync()) {
     await watch(invalidated, libDirectory);
     stdout.writeln('> watching lib folder.');
@@ -138,6 +138,7 @@ Future<void> main(List<String> arguments) async {
   stopwatch.reset();
   await run();
   stdout.writeln('> press r to restart and q to exit.');
+
   try {
     stdin.echoMode = false;
     stdin.lineMode = false;
@@ -147,6 +148,7 @@ Future<void> main(List<String> arguments) async {
     // We ignore this for now as disabling echoMode and lineMode
     // is 'nice to have' but not necessary.
   }
+
   await for (final bytes in stdin) {
     switch (bytes[0]) {
       case 114:
@@ -158,9 +160,11 @@ Future<void> main(List<String> arguments) async {
         stopwatch.reset();
         await run();
         break;
+
       case 113:
         final exitCode = await client.shutdown();
         exit(exitCode);
+
       default:
         final input = String.fromCharCodes(bytes);
         stdout
@@ -174,16 +178,13 @@ _DiscoveredRoot _find({
   required String target,
 }) {
   // Start out at the directive where the given file is contained.
-  Directory current = file.parent.absolute;
+  var current = file.parent.absolute;
+
   for (;;) {
     // Construct a candidate where the file we are looking for could be.
-    final candidate = File(
-      path.join(
-        current.path,
-        target,
-      ),
-    );
+    final candidate = File(path.join(current.path, target));
     final fileFound = candidate.existsSync();
+
     if (fileFound) {
       // If the file has been found, return its path.
       return _DiscoveredRoot(
@@ -196,6 +197,7 @@ _DiscoveredRoot _find({
       // the root directory has been reached
       final parent = current.parent;
       final rootDirectoryReached = current == parent;
+
       if (rootDirectoryReached) {
         // package_config not found.
         return _DiscoveredRoot(
