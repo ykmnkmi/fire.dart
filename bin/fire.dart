@@ -1,144 +1,137 @@
 import 'dart:io'
-    show
-        Directory,
-        File,
-        FileSystemEntity,
-        Platform,
-        Process,
-        StdinException,
-        exit,
-        stdin,
-        stdout;
+    show Directory, File, FileSystemEntity, Platform, Process, StdinException, exit, stdin, stdout;
 
-import 'package:frontend_server_client/frontend_server_client.dart'
-    show FrontendServerClient;
+import 'package:frontend_server_client/frontend_server_client.dart' show FrontendServerClient;
 import 'package:path/path.dart' as path;
 import 'package:stack_trace/stack_trace.dart' show Trace;
 import 'package:watcher/watcher.dart' show DirectoryWatcher;
 
-const String kernel = 'lib/_internal/vm_platform_strong.dill';
-
-final String dartExecutable = path.normalize(Platform.resolvedExecutable);
-final String sdkDir = path.dirname(path.dirname(dartExecutable));
-
-Future<void> main(List<String> arguments) async {
-  if (arguments.isEmpty) {
-    stdout.writeln('> usage: fire file.dart [arguments].');
+Future<void> main(
+  final List<String> args,
+) async {
+  if (args.isEmpty) {
+    _output("> usage: fire file.dart [arguments].");
     exit(1);
+  } else {
+    final file_path = args[0];
+    if (FileSystemEntity.isFileSync(file_path)) {
+      await run(
+        file_path: file_path,
+        output_path: path.setExtension(file_path, ".dill"),
+        kernel_path: "lib/_internal/vm_platform_strong.dill",
+        args: [
+          // Don't pass on the first arg (which contains
+          // the file to run and is meant to be used only
+          // by fire itself) to the executable.
+          if (args.isNotEmpty)
+            ...args.sublist(1, args.length),
+        ],
+      );
+    } else {
+      _output("'" + file_path + "' not found or isn't a file.");
+      exit(2);
+    }
   }
+}
 
-  final filePath = arguments[0];
-  final fileUri = path.toUri(filePath);
-
-  if (!FileSystemEntity.isFileSync(filePath)) {
-    stdout.writeln('\'$filePath\' not found or is\'n a file.');
-    exit(2);
-  }
-
-  final output = path.setExtension(filePath, '.dill');
-  arguments[0] = output;
-
-  FrontendServerClient client;
-
+// region internal
+Future<void> run({
+  required final String file_path,
+  required final String output_path,
+  required final String kernel_path,
+  required final List<String> args,
+}) async {
+  final file_uri = path.toUri(file_path);
+  final dart_executable = path.normalize(Platform.resolvedExecutable);
   final root = _find(
-    file: File(filePath),
+    file: File(file_path),
     // This constant was taken from `FrontendServerClient.start`s
     // packageJson parameters default value.
-    target: '.dart_tool/package_config.json',
+    target: ".dart_tool/package_config.json",
   );
-
+  final FrontendServerClient client;
   try {
     client = await FrontendServerClient.start(
-      filePath,
-      output,
-      kernel,
+      file_path,
+      output_path,
+      kernel_path,
       packagesJson: root.target,
     );
-  } catch (error, stackTrace) {
-    stdout.writeln(error);
-    stdout.writeln(Trace.format(stackTrace));
+  } on Object catch (error, stack_trace) {
+    _output(error.toString());
+    _output(Trace.format(stack_trace));
     exit(3);
   }
-
   final invalidated = <Uri>{};
-
-  Future<void> watch(Set<Uri> invalidated, Directory dir) {
+  Future<void> watch(
+    final Set<Uri> invalidated,
+    final Directory dir,
+  ) {
     final watcher = DirectoryWatcher(dir.absolute.path);
-
-    watcher.events.listen((event) {
-      stdout.writeln(event);
+    watcher.events.listen((final event) {
+      _output(event.toString());
       invalidated.add(path.toUri(event.path));
     });
-
     return watcher.ready;
   }
 
   // We assume that the lib directory can be found in
   // the directory where .dart_tool directory was found.
-  final libDirectory = Directory(path.join(root.root.path, 'lib'));
-
-  if (libDirectory.existsSync()) {
-    await watch(invalidated, libDirectory);
-    stdout.writeln('> watching lib folder.');
+  final lib_directory = Directory(path.join(root.root.path, "lib"));
+  if (lib_directory.existsSync()) {
+    await watch(invalidated, lib_directory);
+    _output("> watching lib folder.");
   } else {
-    stdout.writeln('> not watching the lib folder because it does not exist.');
+    _output("> not watching the lib folder because it does not exist.");
   }
-
   Future<void> reload() async {
     try {
-      final result = await client.compile(<Uri>[fileUri, ...invalidated]);
+      final result = await client.compile(<Uri>[file_uri, ...invalidated]);
       invalidated.clear();
-
       if (result.dillOutput == null) {
-        stdout.writeln();
-        stdout.writeln('> no compilation result, rejecting.');
+        _output("");
+        _output("> no compilation result, rejecting.");
         return client.reject();
-      }
-
-      if (result.errorCount > 0) {
-        stdout.writeln('> compiled with ${result.errorCount} error(s).');
+      } else if (result.errorCount > 0) {
+        _output("> compiled with " + result.errorCount.toString() + " error(s).");
         return client.reject();
+      } else {
+        for (final line in result.compilerOutputLines) {
+          _output(line);
+        }
+        client.accept();
+        client.reset();
       }
-
-      for (final line in result.compilerOutputLines) {
-        stdout.writeln(line);
-      }
-
-      client.accept();
-      client.reset();
-    } catch (error, trace) {
-      stdout.writeln(error);
-      stdout.writeln(Trace.format(trace));
+    } on Object catch (error, trace) {
+      _output(error.toString());
+      _output(Trace.format(trace));
     }
   }
 
   Future<void> run() async {
     try {
-      final result = await Process.run(dartExecutable, arguments);
-
+      final result = await Process.run(dart_executable, args);
       if (result.stdout != null) {
-        stdout.writeln(result.stdout.toString().trimRight());
+        _output(result.stdout.toString().trimRight());
       }
-
       if (result.stderr != null) {
-        stdout.writeln(result.stderr.toString().trimRight());
+        _output(result.stderr.toString().trimRight());
       }
-    } catch (error, trace) {
-      stdout.writeln(error);
-      stdout.writeln(Trace.format(trace));
+    } on Object catch (error, trace) {
+      _output(error.toString());
+      _output(Trace.format(trace));
     }
   }
 
   final stopwatch = Stopwatch();
-  stdout.write('> compiling...');
+  _output("> compiling...");
   stopwatch.start();
   await reload();
   stopwatch.stop();
-  stdout.writeln('\r> compiling done, took ${stopwatch.elapsed}');
+  _output("> compiling done, took " + stopwatch.elapsed.toString());
   stopwatch.reset();
   await run();
-  stdout.writeln('> press r to restart and q to exit.');
-
+  _output("> press r to restart and q to exit.");
   try {
     stdin.echoMode = false;
     stdin.lineMode = false;
@@ -148,44 +141,50 @@ Future<void> main(List<String> arguments) async {
     // We ignore this for now as disabling echoMode and lineMode
     // is 'nice to have' but not necessary.
   }
-
   await for (final bytes in stdin) {
+    const char_r = 114;
+    const char_q = 113;
+    const char_linefeed = 10;
     switch (bytes[0]) {
-      case 114:
-        stdout.write('> restarting...');
+      case char_r:
+        _output("> restarting...");
         stopwatch.start();
         await reload();
         stopwatch.stop();
-        stdout.writeln('\r> done, took ${stopwatch.elapsed}');
+        _output("> done, took " + stopwatch.elapsed.toString());
         stopwatch.reset();
         await run();
         break;
-
-      case 113:
-        final exitCode = await client.shutdown();
-        exit(exitCode);
-
+      case char_q:
+        final exit_code = await client.shutdown();
+        exit(exit_code);
+      case char_linefeed:
+        // We output a new line and not warn about unexpected input.
+        // Why? It is common to 'spam' the terminal with
+        // newlines to introduce a bunch of empty
+        // lines as an ad-hoc way to clear the terminal.
+        // These empty lines serve as a visual divider between
+        // previous output and new output and improve the UX.
+        _output("");
+        break;
       default:
         final input = String.fromCharCodes(bytes);
-        stdout
-            .writeln('> expected r to restart and q to exit, got \'$input\'.');
+        _output("> expected r to restart and q to exit, got '" + input + "'.");
     }
   }
 }
 
 _DiscoveredRoot _find({
-  required File file,
-  required String target,
+  required final File file,
+  required final String target,
 }) {
   // Start out at the directive where the given file is contained.
-  var current = file.parent.absolute;
-
+  Directory current = file.parent.absolute;
   for (;;) {
     // Construct a candidate where the file we are looking for could be.
     final candidate = File(path.join(current.path, target));
-    final fileFound = candidate.existsSync();
-
-    if (fileFound) {
+    final file_found = candidate.existsSync();
+    if (file_found) {
       // If the file has been found, return its path.
       return _DiscoveredRoot(
         target: candidate.absolute.path,
@@ -196,9 +195,8 @@ _DiscoveredRoot _find({
       // Walk up the current directory until
       // the root directory has been reached
       final parent = current.parent;
-      final rootDirectoryReached = current == parent;
-
-      if (rootDirectoryReached) {
+      final root_directory_reached = current == parent;
+      if (root_directory_reached) {
         // package_config not found.
         return _DiscoveredRoot(
           target: target,
@@ -222,4 +220,10 @@ class _DiscoveredRoot {
     required this.root,
   });
 }
-// ignore_for_file: avoid_print
+
+void _output(
+  final String line,
+) {
+  stdout.writeln(line);
+}
+// endregion
