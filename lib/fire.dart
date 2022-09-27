@@ -107,13 +107,8 @@ Future<void> run_fire({
     }
   }
 
-  final stopwatch = Stopwatch();
   _output("> compiling...");
-  stopwatch.start();
-  await reload();
-  stopwatch.stop();
-  _output("> compiling done, took " + stopwatch.elapsed.toString());
-  stopwatch.reset();
+  _output("> compiling done, took " + await _measure_in_ms(reload));
   await run();
   _output("> press r to restart and q to exit.");
   try {
@@ -132,18 +127,14 @@ Future<void> run_fire({
     switch (bytes[0]) {
       case char_r:
         _output("> restarting...");
-        stopwatch.start();
-        await reload();
-        stopwatch.stop();
-        _output("> done, took " + stopwatch.elapsed.toString());
-        stopwatch.reset();
+        _output("> done, took " + await _measure_in_ms(reload));
         await run();
         break;
       case char_q:
         final exit_code = await client.shutdown();
         exit(exit_code);
       case char_linefeed:
-        // We output a new line and not warn about unexpected input.
+        // We output a new line and don't warn about unexpected input.
         // Why? It is common to 'spam' the terminal with
         // newlines to introduce a bunch of empty
         // lines as an ad-hoc way to clear the terminal.
@@ -206,4 +197,15 @@ class _DiscoveredRoot {
   });
 }
 
+Future<String> _measure_in_ms(
+  final Future<void> Function() fn,
+) async {
+  final stopwatch = Stopwatch();
+  stopwatch.start();
+  await fn();
+  stopwatch.stop();
+  final ms = (stopwatch.elapsed.inMicroseconds / 1000).toStringAsFixed(2) + " ms";
+  stopwatch.reset();
+  return ms;
+}
 // endregion
