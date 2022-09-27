@@ -20,11 +20,7 @@ Future<void> main(
         output_path: path.setExtension(file_path, ".dill"),
         kernel_path: "lib/_internal/vm_platform_strong.dill",
         args: [
-          // Don't pass on the first arg (which contains
-          // the file to run and is meant to be used only
-          // by fire itself) to the executable.
-          if (args.isNotEmpty)
-            ...args.sublist(1, args.length),
+          if (args.isNotEmpty) ...args.sublist(1, args.length),
         ],
       );
     } else {
@@ -41,8 +37,6 @@ Future<void> run({
   required final String kernel_path,
   required final List<String> args,
 }) async {
-  final file_uri = path.toUri(file_path);
-  final dart_executable = path.normalize(Platform.resolvedExecutable);
   final root = _find(
     file: File(file_path),
     // This constant was taken from `FrontendServerClient.start`s
@@ -86,7 +80,12 @@ Future<void> run({
   }
   Future<void> reload() async {
     try {
-      final result = await client.compile(<Uri>[file_uri, ...invalidated]);
+      final result = await client.compile(
+        <Uri>[
+          path.toUri(file_path),
+          ...invalidated,
+        ],
+      );
       invalidated.clear();
       if (result.dillOutput == null) {
         _output("");
@@ -110,7 +109,13 @@ Future<void> run({
 
   Future<void> run() async {
     try {
-      final result = await Process.run(dart_executable, args);
+      final result = await Process.run(
+        path.normalize(Platform.resolvedExecutable),
+        [
+          output_path,
+          ...args,
+        ],
+      );
       if (result.stdout != null) {
         _output(result.stdout.toString().trimRight());
       }
