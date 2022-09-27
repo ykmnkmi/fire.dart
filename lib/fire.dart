@@ -50,7 +50,7 @@ Future<void> run_fire({
   }
 
   // We assume that the lib directory can be found in
-  // the directory where .dart_tool directory was found.
+  // the directory where the .dart_tool directory was found.
   final lib_directory = Directory(path.join(root.root.path, "lib"));
   if (lib_directory.existsSync()) {
     await watch(invalidated, lib_directory);
@@ -108,7 +108,7 @@ Future<void> run_fire({
   }
 
   _output("> compiling...");
-  _output("> compiling done, took " + await _measure_in_ms(reload));
+  _output("> compiling done, took " + await _measure_in_ms(fn: reload));
   await run();
   _output("> press r to restart and q to exit.");
   try {
@@ -127,7 +127,7 @@ Future<void> run_fire({
     switch (bytes[0]) {
       case char_r:
         _output("> restarting...");
-        _output("> done, took " + await _measure_in_ms(reload));
+        _output("> done, took " + await _measure_in_ms(fn: reload));
         await run();
         break;
       case char_q:
@@ -197,9 +197,9 @@ class _DiscoveredRoot {
   });
 }
 
-Future<String> _measure_in_ms(
-  final Future<void> Function() fn,
-) async {
+Future<String> _measure_in_ms({
+  required final Future<void> Function() fn,
+}) async {
   final stopwatch = Stopwatch();
   stopwatch.start();
   await fn();
