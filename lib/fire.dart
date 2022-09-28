@@ -5,6 +5,8 @@ import 'package:path/path.dart' as path;
 import 'package:stack_trace/stack_trace.dart' show Trace;
 import 'package:watcher/watcher.dart' show DirectoryWatcher;
 
+// Run this command to active fire locally:
+// > dart pub global activate fire.dart --source=path
 Future<void> run_fire({
   required final String file_path,
   required final String output_path,
@@ -121,18 +123,28 @@ Future<void> run_fire({
     // is 'nice to have' but not necessary.
   }
   await for (final bytes in stdin) {
-    const char_r = 114;
     const char_q = 113;
+    const char_r = 114;
+    const char_s = 115;
     const char_linefeed = 10;
     switch (bytes[0]) {
-      case char_r:
+      case char_q:
+        // We quit fire on a single lowercase 'q'.
+        final exit_code = await client.shutdown();
+        exit(exit_code);
+      restart: case char_r:
+        // We restart the application on a single lowercase 'r'.
         _output("> restarting...");
         _output("> done, took " + await _measure_in_ms(fn: reload));
         await run();
         break;
-      case char_q:
-        final exit_code = await client.shutdown();
-        exit(exit_code);
+      case char_s:
+        // We clear the view slightly on a lowercase 's'
+        // and continue with a lowercase 'r'.
+        for (int i = 0; i < 10; i++) {
+          _output("");
+        }
+        continue restart;
       case char_linefeed:
         // We output a new line and don't warn about unexpected input.
         // Why? It is common to 'spam' the terminal with
