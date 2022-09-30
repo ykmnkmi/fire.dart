@@ -1,8 +1,7 @@
-import 'dart:io' show Directory, File, Platform, Process, StdinException, exit, stdin, stdout;
+import 'dart:io' show Directory, File, Platform, Process, ProcessResult, StdinException, exit, stdin;
 
 import 'package:frontend_server_client/frontend_server_client.dart' show FrontendServerClient;
 import 'package:path/path.dart' as path;
-import 'package:stack_trace/stack_trace.dart' show Trace;
 import 'package:watcher/watcher.dart' show DirectoryWatcher;
 
 // Run this command to active fire locally:
@@ -12,13 +11,8 @@ Future<void> run_fire({
   required final String output_path,
   required final String kernel_path,
   required final List<String> args,
+  required final FireOutputDelegate output,
 }) async {
-  void _output(
-    final String line,
-  ) {
-    stdout.writeln(line);
-  }
-
   final root = _find(
     file: File(file_path),
     // This constant was taken from `FrontendServerClient.start`s
@@ -34,8 +28,7 @@ Future<void> run_fire({
       packagesJson: root.target,
     );
   } on Object catch (error, stack_trace) {
-    _output(error.toString());
-    _output(Trace.format(stack_trace));
+    output.output_error(error, stack_trace);
     exit(3);
   }
   final invalidated = <Uri>{};
@@ -45,7 +38,7 @@ Future<void> run_fire({
   ) {
     final watcher = DirectoryWatcher(dir.absolute.path);
     watcher.events.listen((final event) {
-      _output(event.toString());
+      output.output_string(event.toString());
       invalidated.add(path.toUri(event.path));
     });
     return watcher.ready;
@@ -56,35 +49,48 @@ Future<void> run_fire({
   final lib_directory = Directory(path.join(root.root.path, "lib"));
   if (lib_directory.existsSync()) {
     await watch(invalidated, lib_directory);
-    _output("> watching lib folder.");
+    output.output_string("> watching lib folder.");
   } else {
-    _output("> not watching the lib folder because it does not exist.");
+    output.output_string("> not watching the lib folder because it does not exist.");
   }
   Future<void> reload() async {
-    try {
-      final result = await client.compile(
-        <Uri>[
-          path.toUri(file_path),
-          ...invalidated,
-        ],
-      );
-      invalidated.clear();
-      if (result.dillOutput == null) {
-        _output("> no compilation result, rejecting.");
-        await client.reject();
-      } else if (result.errorCount > 0) {
-        _output("> compiled with " + result.errorCount.toString() + " error(s).");
-        await client.reject();
-      } else {
-        for (final line in result.compilerOutputLines) {
-          _output(line);
+    final success = await () async {
+      try {
+        final result = await client.compile(
+          <Uri>[
+            path.toUri(file_path),
+            ...invalidated,
+          ],
+        );
+        invalidated.clear();
+        if (result.dillOutput == null) {
+          output.output_string("> no compilation result, rejecting.");
+          return false;
+        } else {
+          if (result.errorCount > 0) {
+            output.output_string("> ❌ compiled with " + result.errorCount.toString() + " error(s).");
+            output.output_compiler_output(
+              result.compilerOutputLines,
+            );
+            return false;
+          } else {
+            output.output_string("> ✅ compiled with no errors.");
+            output.output_compiler_output(
+              result.compilerOutputLines,
+            );
+            return true;
+          }
         }
-        client.accept();
-        client.reset();
+      } on Object catch (error, stack_trace) {
+        output.output_error(error, stack_trace);
+        return false;
       }
-    } on Object catch (error, trace) {
-      _output(error.toString());
-      _output(Trace.format(trace));
+    }();
+    if (success) {
+      client.accept();
+      client.reset();
+    } else {
+      await client.reject();
     }
   }
 
@@ -97,22 +103,16 @@ Future<void> run_fire({
           ...args,
         ],
       );
-      if (result.stdout != null) {
-        _output(result.stdout.toString().trimRight());
-      }
-      if (result.stderr != null) {
-        _output(result.stderr.toString().trimRight());
-      }
-    } on Object catch (error, trace) {
-      _output(error.toString());
-      _output(Trace.format(trace));
+      output.redirect_process(result);
+    } on Object catch (error, stack_trace) {
+      output.output_error(error, stack_trace);
     }
   }
 
-  _output("> compiling...");
-  _output("> compiling done, took " + await _measure_in_ms(fn: reload));
+  output.output_string("> compiling...");
+  output.output_string("> ...compiling done, took " + await _measure_in_ms(fn: reload));
   await run();
-  _output("> press r to restart and q to exit.");
+  output.output_string("> press r to restart and q to exit.");
   try {
     stdin.echoMode = false;
     stdin.lineMode = false;
@@ -132,17 +132,18 @@ Future<void> run_fire({
         // We quit fire on a single lowercase 'q'.
         final exit_code = await client.shutdown();
         exit(exit_code);
-      restart: case char_r:
+      restart:
+      case char_r:
         // We restart the application on a single lowercase 'r'.
-        _output("> restarting...");
-        _output("> done, took " + await _measure_in_ms(fn: reload));
+        output.output_string("> restarting...");
+        output.output_string("> done, took " + await _measure_in_ms(fn: reload));
         await run();
         break;
       case char_s:
         // We clear the view slightly on a lowercase 's'
         // and continue with a lowercase 'r'.
         for (int i = 0; i < 10; i++) {
-          _output("");
+          output.output_string("");
         }
         continue restart;
       case char_linefeed:
@@ -151,14 +152,37 @@ Future<void> run_fire({
         // newlines to introduce a bunch of empty
         // lines as an ad-hoc way to clear the terminal.
         // These empty lines serve as a visual divider between
-        // previous output and new output and improve the UX.
-        _output("");
+        // previous output and new output which improves the UX.
+        output.output_string("");
         break;
       default:
         final input = String.fromCharCodes(bytes);
-        _output("> expected r to restart and q to exit, got '" + input + "'.");
+        output.output_string("> expected r to restart and q to exit, got '" + input + "'.");
     }
   }
+}
+
+abstract class FireOutputDelegate {
+  /// For warnings or informative messages.
+  void output_string(
+    final String str,
+  );
+
+  /// For caught errors.
+  void output_error(
+    final Object payload,
+    final StackTrace stack_trace,
+  );
+
+  /// For compiler output.
+  void output_compiler_output(
+    final Iterable<String> values,
+  );
+
+  /// For [Process] output.
+  void redirect_process(
+    final ProcessResult result,
+  );
 }
 
 // region internal
