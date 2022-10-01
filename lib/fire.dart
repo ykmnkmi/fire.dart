@@ -19,40 +19,38 @@ Future<void> run_fire({
     // packageJson parameters default value.
     target: ".dart_tool/package_config.json",
   );
-  final FrontendServerClient client;
-  try {
-    client = await FrontendServerClient.start(
-      file_path,
-      output_path,
-      kernel_path,
-      packagesJson: root.target,
-    );
-  } on Object catch (error, stack_trace) {
-    output.output_error(error, stack_trace);
-    exit(3);
-  }
+  final client = await () async {
+    try {
+      return await FrontendServerClient.start(
+        file_path,
+        output_path,
+        kernel_path,
+        packagesJson: root.target,
+      );
+    } on Object catch (error, stack_trace) {
+      output.output_error(error, stack_trace);
+      return exit(3);
+    }
+  }();
   final invalidated = <Uri>{};
-  Future<void> watch(
-    final Set<Uri> invalidated,
-    final Directory dir,
-  ) {
-    final watcher = DirectoryWatcher(dir.absolute.path);
-    watcher.events.listen((final event) {
-      output.output_string(event.toString());
-      invalidated.add(path.toUri(event.path));
-    });
-    return watcher.ready;
-  }
-
   // We assume that the lib directory can be found in
   // the directory where the .dart_tool directory was found.
   final lib_directory = Directory(path.join(root.root.path, "lib"));
-  if (lib_directory.existsSync()) {
-    await watch(invalidated, lib_directory);
-    output.output_string("> watching lib folder.");
-  } else {
-    output.output_string("> not watching the lib folder because it does not exist.");
-  }
+  final is_watching = await () async {
+    if (lib_directory.existsSync()) {
+      final watcher = DirectoryWatcher(lib_directory.absolute.path);
+      watcher.events.listen((final event) {
+        output.output_string(event.toString());
+        invalidated.add(path.toUri(event.path));
+      });
+      output.output_string("> watching lib directory.");
+      await watcher.ready;
+      return true;
+    } else {
+      output.output_string("> not watching the lib folder because it does not exist.");
+      return false;
+    }
+  }();
   Future<void> reload() async {
     final success = await () async {
       try {
@@ -94,10 +92,11 @@ Future<void> run_fire({
     }
   }
 
+  final platform_executable = path.normalize(Platform.resolvedExecutable);
   Future<void> run() async {
     try {
       final result = await Process.run(
-        path.normalize(Platform.resolvedExecutable),
+        platform_executable,
         [
           output_path,
           ...args,
@@ -112,22 +111,59 @@ Future<void> run_fire({
   output.output_string("> compiling...");
   output.output_string("> ...compiling done, took " + await _measure_in_ms(fn: reload));
   await run();
-  output.output_string("> press r to restart and q to exit.");
-  try {
-    stdin.echoMode = false;
-    stdin.lineMode = false;
-  } on StdinException {
-    // This exception is thrown when run via the intellij UI:
-    // 'OS Error: Inappropriate ioctl for device, errno = 25'
-    // We ignore this for now as disabling echoMode and lineMode
-    // is 'nice to have' but not necessary.
-  }
+  output.output_string("> press 'h' for a tutorial.");
+  final did_disable_terminal_modes = () {
+    try {
+      stdin.echoMode = false;
+      stdin.lineMode = false;
+      return true;
+    } on StdinException {
+      // This exception is thrown when run via the intellij UI:
+      // 'OS Error: Inappropriate ioctl for device, errno = 25'
+      // We ignore this for now as disabling echoMode and lineMode
+      // is 'nice to have' but not necessary.
+      return false;
+    }
+  }();
   await for (final bytes in stdin) {
+    const char_d = 100;
+    const char_h = 104;
     const char_q = 113;
     const char_r = 114;
     const char_s = 115;
     const char_linefeed = 10;
     switch (bytes[0]) {
+      case char_d:
+        // We print debug information on a lowercase 'd'.
+        output.output_string("fire.dart state:");
+        output.output_string("Arguments:");
+        output.output_string(" • File path: " + file_path);
+        output.output_string(" • Output path: " + output_path);
+        output.output_string(" • Kernel path: " + kernel_path);
+        output.output_string(" • Args: " + args.toString());
+        output.output_string(" • Platform executable: " + platform_executable);
+        output.output_string("Root:");
+        output.output_string(" • Detected root: " + root.root.toString());
+        output.output_string(" • Detected package_config.json: " + root.target);
+        output.output_string("Watcher:");
+        output.output_string(" • Expected lib directory path: " + lib_directory.toString());
+        output.output_string(" • Watching lib directory: " + is_watching.toString());
+        output.output_string(" • Invalidated files (" + invalidated.length.toString() + "):");
+        for (final uri in invalidated) {
+          output.output_string("   - " + uri.toString());
+        }
+        output.output_string("Terminal:");
+        output.output_string(" • Modes are set to false: " + did_disable_terminal_modes.toString());
+        break;
+      case char_h:
+        // We print a tutorial on a lowercase 'h'.
+        output.output_string("fire.dart tutorial:");
+        output.output_string(" - press 'd' to view debug infomation.");
+        output.output_string(" - press 'h' to output a tutorial.");
+        output.output_string(" - press 'q' to quit fire.");
+        output.output_string(" - press 'r' to hot restart.");
+        output.output_string(" - press 's' to clear the screen and hot restart.");
+        break;
       case char_q:
         // We quit fire on a single lowercase 'q'.
         final exit_code = await client.shutdown();
