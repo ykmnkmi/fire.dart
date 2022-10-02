@@ -4,6 +4,8 @@ import 'package:frontend_server_client/frontend_server_client.dart' show Fronten
 import 'package:path/path.dart' as path;
 import 'package:watcher/watcher.dart' show DirectoryWatcher;
 
+// TODO finish auto reloading.
+// TODO finish building a testsuite.
 // Run this command to active fire locally:
 // > dart pub global activate fire.dart --source=path
 Future<void> run_fire({
@@ -19,6 +21,7 @@ Future<void> run_fire({
     // packageJson parameters default value.
     target: ".dart_tool/package_config.json",
   );
+  AutoRestartMode auto_restart_mode = AutoRestartMode.none;
   final client = await () async {
     try {
       return await FrontendServerClient.start(
@@ -40,8 +43,17 @@ Future<void> run_fire({
     if (lib_directory.existsSync()) {
       final watcher = DirectoryWatcher(lib_directory.absolute.path);
       watcher.events.listen((final event) {
-        output.output_string(event.toString());
-        invalidated.add(path.toUri(event.path));
+        output.output_string("> " + event.toString());
+        final invalidate = path.toUri(event.path);
+        invalidated.add(invalidate);
+        switch (auto_restart_mode) {
+          case AutoRestartMode.none:
+            break;
+          case AutoRestartMode.on_entry_changed:
+            // TODO restart automatically after the
+            // TODO  main entry script has been modified.
+            break;
+        }
       });
       output.output_string("> watching lib directory.");
       await watcher.ready;
@@ -67,15 +79,11 @@ Future<void> run_fire({
         } else {
           if (result.errorCount > 0) {
             output.output_string("> ❌ compiled with " + result.errorCount.toString() + " error(s).");
-            output.output_compiler_output(
-              result.compilerOutputLines,
-            );
+            output.output_compiler_output(result.compilerOutputLines);
             return false;
           } else {
             output.output_string("> ✅ compiled with no errors.");
-            output.output_compiler_output(
-              result.compilerOutputLines,
-            );
+            output.output_compiler_output(result.compilerOutputLines);
             return true;
           }
         }
@@ -109,7 +117,8 @@ Future<void> run_fire({
   }
 
   output.output_string("> compiling...");
-  output.output_string("> ...compiling done, took " + await _measure_in_ms(fn: reload));
+  final reloading_duration = await _measure_in_ms(fn: reload);
+  output.output_string("> ...compiling done, took " + reloading_duration);
   await run();
   output.output_string("> press 'h' for a tutorial.");
   final did_disable_terminal_modes = () {
@@ -128,6 +137,8 @@ Future<void> run_fire({
   await for (final bytes in stdin) {
     const char_d = 100;
     const char_h = 104;
+    const char_m = 109;
+    const char_n = 110;
     const char_q = 113;
     const char_r = 114;
     const char_s = 115;
@@ -142,6 +153,8 @@ Future<void> run_fire({
         output.output_string(" • Kernel path: " + kernel_path);
         output.output_string(" • Args: " + args.toString());
         output.output_string(" • Platform executable: " + platform_executable);
+        output.output_string("Auto reloading:");
+        output.output_string(" • State: " + auto_restart_mode.toString());
         output.output_string("Root:");
         output.output_string(" • Detected root: " + root.root.toString());
         output.output_string(" • Detected package_config.json: " + root.target);
@@ -160,9 +173,38 @@ Future<void> run_fire({
         output.output_string("fire.dart tutorial:");
         output.output_string(" - press 'd' to view debug infomation.");
         output.output_string(" - press 'h' to output a tutorial.");
+        output.output_string(" - press 'm' to enable auto reloading on a change to the entry script.");
+        output.output_string(" - press 'n' to disable auto reloading on a change to the entry script.");
         output.output_string(" - press 'q' to quit fire.");
         output.output_string(" - press 'r' to hot restart.");
         output.output_string(" - press 's' to clear the screen and hot restart.");
+        break;
+      case char_m:
+        // On a lowercase 'm' we enable a mode where the whole program
+        // is reloaded when the main file has been modified.
+        // 'm' and 'n' are separate commands and not a single toggle to
+        // give each command idempotency which improves UX.
+        switch (auto_restart_mode) {
+          case AutoRestartMode.none:
+            auto_restart_mode = AutoRestartMode.on_entry_changed;
+            break;
+          case AutoRestartMode.on_entry_changed:
+            output.output_string("> Auto restart is already enabled.");
+            break;
+        }
+        break;
+      case char_n:
+        // On a lowercase 'n' we disable the auto reload mode.
+        // 'm' and 'n' are separate commands and not a single toggle to
+        // give each command idempotency which improves UX.
+        switch (auto_restart_mode) {
+          case AutoRestartMode.none:
+            output.output_string("> Auto restart is already disabled.");
+            break;
+          case AutoRestartMode.on_entry_changed:
+            auto_restart_mode = AutoRestartMode.none;
+            break;
+        }
         break;
       case char_q:
         // We quit fire on a single lowercase 'q'.
@@ -172,7 +214,8 @@ Future<void> run_fire({
       case char_r:
         // We restart the application on a single lowercase 'r'.
         output.output_string("> restarting...");
-        output.output_string("> done, took " + await _measure_in_ms(fn: reload));
+        final reloading_duration = await _measure_in_ms(fn: reload);
+        output.output_string("> done, took " + reloading_duration);
         await run();
         break;
       case char_s:
@@ -193,7 +236,9 @@ Future<void> run_fire({
         break;
       default:
         final input = String.fromCharCodes(bytes);
-        output.output_string("> expected r to restart and q to exit, got '" + input + "'.");
+        output.output_string(
+          "> expected r to restart and q to exit, got '" + input + "'.",
+        );
     }
   }
 }
@@ -222,6 +267,14 @@ abstract class FireOutputDelegate {
 }
 
 // region internal
+enum AutoRestartMode {
+  /// Never restart automatically.
+  none,
+
+  /// Restart fire when the main file changed.
+  on_entry_changed,
+}
+
 _DiscoveredRoot _find({
   required final File file,
   required final String target,
@@ -276,8 +329,8 @@ Future<String> _measure_in_ms({
   stopwatch.start();
   await fn();
   stopwatch.stop();
-  final ms = (stopwatch.elapsed.inMicroseconds / 1000).toStringAsFixed(2) + " ms";
+  final ms = stopwatch.elapsed.inMicroseconds / 1000;
   stopwatch.reset();
-  return ms;
+  return ms.toStringAsFixed(2) + " ms";
 }
 // endregion
