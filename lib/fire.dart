@@ -4,7 +4,7 @@ import 'package:frontend_server_client/frontend_server_client.dart' show Fronten
 import 'package:path/path.dart' as path;
 import 'package:watcher/watcher.dart' show DirectoryWatcher;
 
-// TODO finish auto reloading.
+// TODO finish auto restarting.
 // TODO finish building a testsuite.
 // Run this command to active fire locally:
 // > dart pub global activate fire.dart --source=path
@@ -50,8 +50,12 @@ Future<void> run_fire({
           case AutoRestartMode.none:
             break;
           case AutoRestartMode.on_entry_changed:
-            // TODO restart automatically after the
-            // TODO  main entry script has been modified.
+            // We are restarting only on changes to the main script.
+            // Any attempts to extend auto restarting to more files
+            // should be careful about infinite loops
+            // TODO restart automatically after the main entry script has been modified.
+            // TODO output a message that an auto restart has been performed
+            // TODO clear the screen on an automatic restart
             break;
         }
       });
@@ -63,7 +67,7 @@ Future<void> run_fire({
       return false;
     }
   }();
-  Future<void> reload() async {
+  Future<void> _restart() async {
     final success = await () async {
       try {
         final result = await client.compile(
@@ -117,8 +121,8 @@ Future<void> run_fire({
   }
 
   output.output_string("> compiling...");
-  final reloading_duration = await _measure_in_ms(fn: reload);
-  output.output_string("> ...compiling done, took " + reloading_duration);
+  final restarting_duration = await _measure_in_ms(fn: _restart);
+  output.output_string("> ...compiling done, took " + restarting_duration);
   await run();
   output.output_string("> press 'h' for a tutorial.");
   final did_disable_terminal_modes = () {
@@ -153,8 +157,10 @@ Future<void> run_fire({
         output.output_string(" • Kernel path: " + kernel_path);
         output.output_string(" • Args: " + args.toString());
         output.output_string(" • Platform executable: " + platform_executable);
-        output.output_string("Auto reloading:");
-        output.output_string(" • State: " + auto_restart_mode.toString());
+        // TODO use colors to make fire.dart output messages stand out from program and compiler output.
+        output.output_string(" • Colorful output enabled: " + stdin.supportsAnsiEscapes.toString());
+        output.output_string("Auto restarting:");
+        output.output_string(" • Mode: " + auto_restart_mode.toString());
         output.output_string("Root:");
         output.output_string(" • Detected root: " + root.root.toString());
         output.output_string(" • Detected package_config.json: " + root.target);
@@ -173,15 +179,15 @@ Future<void> run_fire({
         output.output_string("fire.dart tutorial:");
         output.output_string(" - press 'd' to view debug infomation.");
         output.output_string(" - press 'h' to output a tutorial.");
-        output.output_string(" - press 'm' to enable auto reloading on a change to the entry script.");
-        output.output_string(" - press 'n' to disable auto reloading on a change to the entry script.");
+        output.output_string(" - press 'm' to enable auto restarting on a change to the main entry script.");
+        output.output_string(" - press 'n' to disable auto restarting on a change to the main entry script.");
         output.output_string(" - press 'q' to quit fire.");
         output.output_string(" - press 'r' to hot restart.");
-        output.output_string(" - press 's' to clear the screen and hot restart.");
+        output.output_string(" - press 's' to clear the screen and then hot restart.");
         break;
       case char_m:
         // On a lowercase 'm' we enable a mode where the whole program
-        // is reloaded when the main file has been modified.
+        // is restarted when the main file has been modified.
         // 'm' and 'n' are separate commands and not a single toggle to
         // give each command idempotency which improves UX.
         switch (auto_restart_mode) {
@@ -194,7 +200,7 @@ Future<void> run_fire({
         }
         break;
       case char_n:
-        // On a lowercase 'n' we disable the auto reload mode.
+        // On a lowercase 'n' we disable the auto restart mode.
         // 'm' and 'n' are separate commands and not a single toggle to
         // give each command idempotency which improves UX.
         switch (auto_restart_mode) {
@@ -214,8 +220,8 @@ Future<void> run_fire({
       case char_r:
         // We restart the application on a single lowercase 'r'.
         output.output_string("> restarting...");
-        final reloading_duration = await _measure_in_ms(fn: reload);
-        output.output_string("> done, took " + reloading_duration);
+        final restart_duration = await _measure_in_ms(fn: _restart);
+        output.output_string("> done, took " + restart_duration);
         await run();
         break;
       case char_s:
