@@ -40,40 +40,36 @@ Future<void> run_fire({
   Future<void> restart_run({
     required final String prefix,
   }) async {
-    Future<void> _restart() async {
-      final success = await () async {
-        try {
-          final result = await client.compile(
-            <Uri>[
-              path.toUri(file_path),
-              ...invalidated,
-            ],
-          );
-          invalidated.clear();
-          if (result.dillOutput == null) {
-            output.output_string("> no compilation result, rejecting.");
-            return false;
-          } else {
-            if (result.errorCount > 0) {
-              output.output_string("> ❌ compiled with " + result.errorCount.toString() + " error(s).");
-              output.output_compiler_output(result.compilerOutputLines);
-              return false;
-            } else {
-              output.output_string("> ✅ compiled with no errors.");
-              output.output_compiler_output(result.compilerOutputLines);
-              return true;
-            }
-          }
-        } on Object catch (error, stack_trace) {
-          output.output_error(error, stack_trace);
-          return false;
-        }
-      }();
-      if (success) {
+    Future<bool> _restart() async {
+      try {
+        final result = await client.compile(
+          invalidated.toList(),
+        );
+        // Note calling client.reject seems to never work properly.
+        // Calling 'accept' followed by a 'reset' seem to always
+        // work correctly.
         client.accept();
         client.reset();
-      } else {
-        await client.reject();
+        invalidated.clear();
+        if (result.dillOutput == null) {
+          // It's not clear when this will happen.
+          output.output_string("> no compilation result, rejecting.");
+          return false;
+        } else {
+          if (result.errorCount > 0) {
+            output.output_string("> ❌ compiled with " + result.errorCount.toString() + " error(s).");
+            output.output_compiler_output(result.compilerOutputLines);
+            return false;
+          } else {
+            output.output_string("> ✅ compiled with no errors.");
+            output.output_compiler_output(result.compilerOutputLines);
+            return true;
+          }
+        }
+      } on Object catch (error, stack_trace) {
+        // reject throws if a compilation failed.
+        output.output_error(error, stack_trace);
+        return false;
       }
     }
 
@@ -92,22 +88,24 @@ Future<void> run_fire({
       }
     }
 
-    Future<String> _measure_in_ms({
-      required final Future<void> Function() fn,
+    Future<MapEntry<String, T>> _measure_in_ms<T>({
+      required final Future<T> Function() fn,
     }) async {
       final stopwatch = Stopwatch();
       stopwatch.start();
-      await fn();
+      final result = await fn();
       stopwatch.stop();
       final ms = stopwatch.elapsed.inMicroseconds / 1000;
       stopwatch.reset();
-      return ms.toStringAsFixed(2) + " ms";
+      return MapEntry(ms.toStringAsFixed(2) + " ms", result);
     }
 
     output.output_string("> " + prefix + "...");
     final restart_duration = await _measure_in_ms(fn: _restart);
-    output.output_string("> done, took " + restart_duration);
-    await run();
+    output.output_string("> done, took " + restart_duration.key);
+    if (restart_duration.value) {
+      await run();
+    }
   }
 
   // We assume that the lib directory can be found in
