@@ -38,7 +38,7 @@ Future<void> run_fire({
   final invalidated = <Uri>{};
   final platform_executable = path.normalize(Platform.resolvedExecutable);
   Future<void> restart_run({
-    required final String prefix,
+    required final String name,
   }) async {
     Future<bool> _restart() async {
       try {
@@ -100,12 +100,23 @@ Future<void> run_fire({
       return MapEntry(ms.toStringAsFixed(2) + " ms", result);
     }
 
-    output.output_string("> " + prefix + "...");
+    output.output_string("> " + name + "...");
     final restart_duration = await _measure_in_ms(fn: _restart);
     output.output_string("> done, took " + restart_duration.key);
     if (restart_duration.value) {
       await run();
     }
+  }
+
+  Future<void> clear_restart({
+    required final String name,
+  }) {
+    // We clear the view slightly on a lowercase 's'
+    // and continue with a lowercase 'r'.
+    for (int i = 0; i < 10; i++) {
+      output.output_string("");
+    }
+    return restart_run(name: name);
   }
 
   // We assume that the lib directory can be found in
@@ -126,7 +137,7 @@ Future<void> run_fire({
             break;
           case AutoRestartMode.on_entry_changed:
             if (file_path == event.path) {
-              unawaited(restart_run(prefix: "auto restarting"));
+              unawaited(clear_restart(name: "auto restarting"));
             } else {
               // We stay on the safe side and only restart on
               // changes to the main script.
@@ -145,7 +156,7 @@ Future<void> run_fire({
     }
   }();
 
-  await restart_run(prefix: "compiling",);
+  await restart_run(name: "compiling",);
   output.output_string("> press 'h' for a tutorial.");
   final did_disable_terminal_modes = () {
     try {
@@ -249,15 +260,10 @@ Future<void> run_fire({
         final exit_code = await client.shutdown();
         exit(exit_code);
       case char_r:
-        await restart_run(prefix: "restarting");
+        await restart_run(name: "restarting");
         break;
       case char_s:
-        // We clear the view slightly on a lowercase 's'
-        // and continue with a lowercase 'r'.
-        for (int i = 0; i < 10; i++) {
-          output.output_string("");
-        }
-        await restart_run(prefix: "clear restarting");
+        await clear_restart(name: "clear restarting");
         break;
       case char_linefeed:
         // We output a new line and don't warn about unexpected input.
