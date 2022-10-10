@@ -1,6 +1,16 @@
-import 'dart:io' show Directory, File, Platform, Process, StdinException, exit, stdin, stdout;
+import 'dart:io'
+    show
+        Directory,
+        File,
+        Platform,
+        Process,
+        StdinException,
+        exit,
+        stdin,
+        stdout;
 
-import 'package:frontend_server_client/frontend_server_client.dart' show FrontendServerClient;
+import 'package:frontend_server_client/frontend_server_client.dart'
+    show FrontendServerClient;
 import 'package:path/path.dart' as path;
 import 'package:stack_trace/stack_trace.dart' show Trace;
 import 'package:watcher/watcher.dart' show DirectoryWatcher;
@@ -73,7 +83,8 @@ Future<void> run_fire({
         _output("> no compilation result, rejecting.");
         await client.reject();
       } else if (result.errorCount > 0) {
-        _output("> compiled with " + result.errorCount.toString() + " error(s).");
+        _output(
+            "> compiled with " + result.errorCount.toString() + " error(s).");
         await client.reject();
       } else {
         for (final line in result.compilerOutputLines) {
@@ -132,7 +143,8 @@ Future<void> run_fire({
         // We quit fire on a single lowercase 'q'.
         final exit_code = await client.shutdown();
         exit(exit_code);
-      restart: case char_r:
+      restart:
+      case char_r:
         // We restart the application on a single lowercase 'r'.
         _output("> restarting...");
         _output("> done, took " + await _measure_in_ms(fn: reload));
@@ -216,7 +228,8 @@ Future<String> _measure_in_ms({
   stopwatch.start();
   await fn();
   stopwatch.stop();
-  final ms = (stopwatch.elapsed.inMicroseconds / 1000).toStringAsFixed(2) + " ms";
+  final ms =
+      (stopwatch.elapsed.inMicroseconds / 1000).toStringAsFixed(2) + " ms";
   stopwatch.reset();
   return ms;
 }
