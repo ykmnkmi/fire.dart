@@ -129,9 +129,10 @@ Future<void> run_fire({
     return restart_run(name: name);
   }
 
-  // We assume that the lib directory can be found in
-  // the directory where the .dart_tool directory was found.
-  final lib_directory = Directory(path.join(root.root.path, "lib"));
+  // We watch the whole directory containing the .dart_tool directory.
+  // We do this so that in addition to lib, directories like bin and
+  // test an also contribute to the invalidation logic.
+  final lib_directory = root.root;
   final is_watching = await () async {
     if (lib_directory.existsSync()) {
       final watcher = DirectoryWatcher(lib_directory.absolute.path);
@@ -140,21 +141,26 @@ Future<void> run_fire({
       // ignore: unused_local_variable, cancel_subscriptions
       final subscription = watcher.events.listen((final event) {
         output.output_string("> " + event.toString());
-        final invalidate = path.toUri(event.path);
-        invalidated.add(invalidate);
-        switch (auto_restart_mode) {
-          case AutoRestartMode.none:
-            break;
-          case AutoRestartMode.on_entry_changed:
-            if (file_path == event.path) {
-              unawaited(clear_restart(name: "auto restarting"));
-            } else {
-              // We stay on the safe side and only restart on
-              // changes to the main script.
-              // A restart on any unfiltered change could cascade into
-              // infinite loops and other weird unexpected behaviors.
-            }
-            break;
+        // We only invalidate dart files because other file types
+        // could cause performance issues and shouldn't be relevant
+        // in the majority of cases where fire.dart is being used.
+        if (event.path.endsWith(".dart")) {
+          final invalidate = path.toUri(event.path);
+          invalidated.add(invalidate);
+          switch (auto_restart_mode) {
+            case AutoRestartMode.none:
+              break;
+            case AutoRestartMode.on_entry_changed:
+              if (file_path == event.path) {
+                unawaited(clear_restart(name: "auto restarting"));
+              } else {
+                // We stay on the safe side and only restart on
+                // changes to the main script.
+                // A restart on any unfiltered change could cascade into
+                // infinite loops and other weird unexpected behaviors.
+              }
+              break;
+          }
         }
       });
       output.output_string("> watching lib directory.");
