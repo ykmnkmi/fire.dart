@@ -15,8 +15,9 @@ Future<void> run_fire({
   required final List<String> args,
   required final FireOutputDelegate output,
 }) async {
+  final file_path_file = File(file_path);
   final root = _find(
-    file: File(file_path),
+    file: file_path_file,
     // This constant was taken from `FrontendServerClient.start`s
     // packageJson parameters default value.
     target: ".dart_tool/package_config.json",
@@ -81,6 +82,15 @@ Future<void> run_fire({
             output_path,
             ...args,
           ],
+          // We set the working directory of the to-be-executed
+          // file to the directory of the file itself.
+          // Another reasonable choice for this could have
+          // been the root of the package.
+          // Setting it to the file itself is more useful IMHO,
+          // because IO APIs will work relative to the file and
+          // not relative to be package root (which is what happens
+          // with e.g. the first party "dart" CLI tool.)
+          workingDirectory: file_path_file.parent.path,
         );
         output.redirect_process(result);
       } on Object catch (error, stack_trace) {
@@ -97,7 +107,7 @@ Future<void> run_fire({
       stopwatch.stop();
       final ms = stopwatch.elapsed.inMicroseconds / 1000;
       stopwatch.reset();
-      return MapEntry(ms.toStringAsFixed(2) + " ms", result);
+      return MapEntry(ms.toStringAsFixed(2) + " ms.", result);
     }
 
     output.output_string("> " + name + "...");
