@@ -1,7 +1,17 @@
 import 'dart:async';
-import 'dart:io' show Directory, File, Platform, Process, ProcessResult, StdinException, exit, stdin;
+import 'dart:io'
+    show
+        Directory,
+        File,
+        Platform,
+        Process,
+        ProcessResult,
+        StdinException,
+        exit,
+        stdin;
 
-import 'package:frontend_server_client/frontend_server_client.dart' show FrontendServerClient;
+import 'package:frontend_server_client/frontend_server_client.dart'
+    show FrontendServerClient;
 import 'package:path/path.dart' as path;
 import 'package:watcher/watcher.dart' show DirectoryWatcher;
 
@@ -58,7 +68,9 @@ Future<void> run_fire({
           return false;
         } else {
           if (result.errorCount > 0) {
-            output.output_string("> ❌ compiled with " + result.errorCount.toString() + " error(s).");
+            output.output_string("> ❌ compiled with " +
+                result.errorCount.toString() +
+                " error(s).");
             output.output_compiler_output(result.compilerOutputLines);
             return false;
           } else {
@@ -167,12 +179,15 @@ Future<void> run_fire({
       await watcher.ready;
       return true;
     } else {
-      output.output_string("> not watching the lib folder because it does not exist.");
+      output.output_string(
+          "> not watching the lib folder because it does not exist.");
       return false;
     }
   }();
 
-  await restart_run(name: "compiling",);
+  await restart_run(
+    name: "compiling",
+  );
   output.output_string("> press 'h' for a tutorial.");
   final did_disable_terminal_modes = () {
     try {
@@ -207,21 +222,26 @@ Future<void> run_fire({
         output.output_string(" • Args: " + args.toString());
         output.output_string(" • Platform executable: " + platform_executable);
         // TODO use colors to make fire.dart output messages stand out from program and compiler output.
-        output.output_string(" • Colorful output enabled: " + stdin.supportsAnsiEscapes.toString());
+        output.output_string(" • Colorful output enabled: " +
+            stdin.supportsAnsiEscapes.toString());
         output.output_string("Auto restarting:");
         output.output_string(" • Mode: " + auto_restart_mode.toString());
         output.output_string("Root:");
         output.output_string(" • Detected root: " + root.root.toString());
         output.output_string(" • Detected package_config.json: " + root.target);
         output.output_string("Watcher:");
-        output.output_string(" • Expected lib directory path: " + lib_directory.toString());
-        output.output_string(" • Watching lib directory: " + is_watching.toString());
-        output.output_string(" • Invalidated files (" + invalidated.length.toString() + "):");
+        output.output_string(
+            " • Expected lib directory path: " + lib_directory.toString());
+        output.output_string(
+            " • Watching lib directory: " + is_watching.toString());
+        output.output_string(
+            " • Invalidated files (" + invalidated.length.toString() + "):");
         for (final uri in invalidated) {
           output.output_string("   - " + uri.toString());
         }
         output.output_string("Terminal:");
-        output.output_string(" • Modes are set to false: " + did_disable_terminal_modes.toString());
+        output.output_string(" • Modes are set to false: " +
+            did_disable_terminal_modes.toString());
         break;
       case char_h:
         // We print a tutorial on a lowercase 'h'.
@@ -237,10 +257,13 @@ Future<void> run_fire({
         }
         // The output below is roughly ordered by importance.
         output.output_string(" - press 'r' to hot restart.");
-        output.output_string(" - press 's' to clear the screen and then hot restart.");
+        output.output_string(
+            " - press 's' to clear the screen and then hot restart.");
         output.output_string(" - press 'h' to output a tutorial.");
-        output.output_string(" - press 'm' to enable auto restarting on a change to the main entry script.");
-        output.output_string(" - press 'n' to disable auto restarting on a change to the main entry script.");
+        output.output_string(
+            " - press 'm' to enable auto restarting on a change to the main entry script.");
+        output.output_string(
+            " - press 'n' to disable auto restarting on a change to the main entry script.");
         break;
       case char_m:
         // On a lowercase 'm' we enable a mode where the whole program

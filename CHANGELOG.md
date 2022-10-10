@@ -1,3 +1,7 @@
+## 1.2.2
+
+- Some changes [#7](https://github.com/ykmnkmi/fire.dart/pull/7) from [@modulovalue](https://github.com/modulovalue)
+
 ## 1.2.1
 
 - Meta update
