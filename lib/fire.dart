@@ -1,20 +1,21 @@
+import 'dart:async';
 import 'dart:io'
     show
         Directory,
         File,
         Platform,
         Process,
+        ProcessResult,
         StdinException,
         exit,
-        stdin,
-        stdout;
+        stdin;
 
 import 'package:frontend_server_client/frontend_server_client.dart'
     show FrontendServerClient;
 import 'package:path/path.dart' as path;
-import 'package:stack_trace/stack_trace.dart' show Trace;
 import 'package:watcher/watcher.dart' show DirectoryWatcher;
 
+// TODO finish building a testsuite.
 // Run this command to active fire locally:
 // > dart pub global activate fire.dart --source=path
 Future<void> run_fire({
@@ -22,158 +23,337 @@ Future<void> run_fire({
   required final String output_path,
   required final String kernel_path,
   required final List<String> args,
+  required final FireOutputDelegate output,
 }) async {
-  void _output(
-    final String line,
-  ) {
-    stdout.writeln(line);
-  }
-
+  final file_path_file = File(file_path);
   final root = _find(
-    file: File(file_path),
+    file: file_path_file,
     // This constant was taken from `FrontendServerClient.start`s
     // packageJson parameters default value.
     target: ".dart_tool/package_config.json",
   );
-  final FrontendServerClient client;
-  try {
-    client = await FrontendServerClient.start(
-      file_path,
-      output_path,
-      kernel_path,
-      packagesJson: root.target,
-    );
-  } on Object catch (error, stack_trace) {
-    _output(error.toString());
-    _output(Trace.format(stack_trace));
-    exit(3);
-  }
-  final invalidated = <Uri>{};
-  Future<void> watch(
-    final Set<Uri> invalidated,
-    final Directory dir,
-  ) {
-    final watcher = DirectoryWatcher(dir.absolute.path);
-    watcher.events.listen((final event) {
-      _output(event.toString());
-      invalidated.add(path.toUri(event.path));
-    });
-    return watcher.ready;
-  }
-
-  // We assume that the lib directory can be found in
-  // the directory where the .dart_tool directory was found.
-  final lib_directory = Directory(path.join(root.root.path, "lib"));
-  if (lib_directory.existsSync()) {
-    await watch(invalidated, lib_directory);
-    _output("> watching lib folder.");
-  } else {
-    _output("> not watching the lib folder because it does not exist.");
-  }
-  Future<void> reload() async {
+  AutoRestartMode auto_restart_mode = AutoRestartMode.none;
+  final client = await () async {
     try {
-      final result = await client.compile(
-        <Uri>[
-          path.toUri(file_path),
-          ...invalidated,
-        ],
+      return await FrontendServerClient.start(
+        file_path,
+        output_path,
+        kernel_path,
+        packagesJson: root.target,
       );
-      invalidated.clear();
-      if (result.dillOutput == null) {
-        _output("> no compilation result, rejecting.");
-        await client.reject();
-      } else if (result.errorCount > 0) {
-        _output(
-            "> compiled with " + result.errorCount.toString() + " error(s).");
-        await client.reject();
-      } else {
-        for (final line in result.compilerOutputLines) {
-          _output(line);
-        }
+    } on Object catch (error, stack_trace) {
+      output.output_error(error, stack_trace);
+      return exit(3);
+    }
+  }();
+  final invalidated = <Uri>{};
+  final platform_executable = path.normalize(Platform.resolvedExecutable);
+  Future<void> restart_run({
+    required final String name,
+  }) async {
+    Future<bool> _restart() async {
+      try {
+        final result = await client.compile(
+          invalidated.toList(),
+        );
+        // Note calling client.reject seems to never work properly.
+        // Calling 'accept' followed by a 'reset' seem to always
+        // work correctly.
         client.accept();
         client.reset();
+        invalidated.clear();
+        if (result.dillOutput == null) {
+          // It's not clear when this will happen.
+          output.output_string("> no compilation result, rejecting.");
+          return false;
+        } else {
+          if (result.errorCount > 0) {
+            output.output_string("> ❌ compiled with " +
+                result.errorCount.toString() +
+                " error(s).");
+            output.output_compiler_output(result.compilerOutputLines);
+            return false;
+          } else {
+            output.output_string("> ✅ compiled with no errors.");
+            output.output_compiler_output(result.compilerOutputLines);
+            return true;
+          }
+        }
+      } on Object catch (error, stack_trace) {
+        // reject throws if a compilation failed.
+        output.output_error(error, stack_trace);
+        return false;
       }
-    } on Object catch (error, trace) {
-      _output(error.toString());
-      _output(Trace.format(trace));
+    }
+
+    Future<void> run() async {
+      try {
+        final result = await Process.run(
+          platform_executable,
+          [
+            output_path,
+            ...args,
+          ],
+          // We set the working directory of the to-be-executed
+          // file to the directory of the file itself.
+          // Another reasonable choice for this could have
+          // been the root of the package.
+          // Setting it to the file itself is more useful IMHO,
+          // because IO APIs will work relative to the file and
+          // not relative to be package root (which is what happens
+          // with e.g. the first party "dart" CLI tool.)
+          workingDirectory: file_path_file.parent.path,
+        );
+        output.redirect_process(result);
+      } on Object catch (error, stack_trace) {
+        output.output_error(error, stack_trace);
+      }
+    }
+
+    Future<MapEntry<String, T>> _measure_in_ms<T>({
+      required final Future<T> Function() fn,
+    }) async {
+      final stopwatch = Stopwatch();
+      stopwatch.start();
+      final result = await fn();
+      stopwatch.stop();
+      final ms = stopwatch.elapsed.inMicroseconds / 1000;
+      stopwatch.reset();
+      return MapEntry(ms.toStringAsFixed(2) + " ms.", result);
+    }
+
+    output.output_string("> " + name + "...");
+    final restart_duration = await _measure_in_ms(fn: _restart);
+    output.output_string("> done, took " + restart_duration.key);
+    if (restart_duration.value) {
+      await run();
     }
   }
 
-  Future<void> run() async {
+  Future<void> clear_restart({
+    required final String name,
+  }) {
+    // We clear the view slightly on a lowercase 's'
+    // and continue with a lowercase 'r'.
+    for (int i = 0; i < 10; i++) {
+      output.output_string("");
+    }
+    return restart_run(name: name);
+  }
+
+  // We watch the whole directory containing the .dart_tool directory.
+  // We do this so that in addition to lib, directories like bin and
+  // test an also contribute to the invalidation logic.
+  final lib_directory = root.root;
+  final is_watching = await () async {
+    if (lib_directory.existsSync()) {
+      final watcher = DirectoryWatcher(lib_directory.absolute.path);
+      // We don't cancel the subscription here because it
+      // doesn't matter for this terminal application.
+      // ignore: unused_local_variable, cancel_subscriptions
+      final subscription = watcher.events.listen((final event) {
+        output.output_string("> " + event.toString());
+        // We only invalidate dart files because other file types
+        // could cause performance issues and shouldn't be relevant
+        // in the majority of cases where fire.dart is being used.
+        if (event.path.endsWith(".dart")) {
+          final invalidate = path.toUri(event.path);
+          invalidated.add(invalidate);
+          switch (auto_restart_mode) {
+            case AutoRestartMode.none:
+              break;
+            case AutoRestartMode.on_entry_changed:
+              if (file_path == event.path) {
+                unawaited(clear_restart(name: "auto restarting"));
+              } else {
+                // We stay on the safe side and only restart on
+                // changes to the main script.
+                // A restart on any unfiltered change could cascade into
+                // infinite loops and other weird unexpected behaviors.
+              }
+              break;
+          }
+        }
+      });
+      output.output_string("> watching lib directory.");
+      await watcher.ready;
+      return true;
+    } else {
+      output.output_string(
+          "> not watching the lib folder because it does not exist.");
+      return false;
+    }
+  }();
+
+  await restart_run(
+    name: "compiling",
+  );
+  output.output_string("> press 'h' for a tutorial.");
+  final did_disable_terminal_modes = () {
     try {
-      final result = await Process.run(
-        path.normalize(Platform.resolvedExecutable),
-        [
-          output_path,
-          ...args,
-        ],
-      );
-      if (result.stdout != null) {
-        _output(result.stdout.toString().trimRight());
-      }
-      if (result.stderr != null) {
-        _output(result.stderr.toString().trimRight());
-      }
-    } on Object catch (error, trace) {
-      _output(error.toString());
-      _output(Trace.format(trace));
+      stdin.echoMode = false;
+      stdin.lineMode = false;
+      return true;
+    } on StdinException {
+      // This exception is thrown when run via the intellij UI:
+      // 'OS Error: Inappropriate ioctl for device, errno = 25'
+      // We ignore this for now as disabling echoMode and lineMode
+      // is 'nice to have' but not necessary.
+      return false;
     }
-  }
-
-  _output("> compiling...");
-  _output("> compiling done, took " + await _measure_in_ms(fn: reload));
-  await run();
-  _output("> press r to restart and q to exit.");
-  try {
-    stdin.echoMode = false;
-    stdin.lineMode = false;
-  } on StdinException {
-    // This exception is thrown when run via the intellij UI:
-    // 'OS Error: Inappropriate ioctl for device, errno = 25'
-    // We ignore this for now as disabling echoMode and lineMode
-    // is 'nice to have' but not necessary.
-  }
+  }();
   await for (final bytes in stdin) {
+    const char_d = 100;
+    const char_h = 104;
+    const char_m = 109;
+    const char_n = 110;
     const char_q = 113;
     const char_r = 114;
     const char_s = 115;
     const char_linefeed = 10;
     switch (bytes[0]) {
+      case char_d:
+        // We print debug information on a lowercase 'd'.
+        output.output_string("fire.dart debug state:");
+        output.output_string("Arguments:");
+        output.output_string(" • File path: " + file_path);
+        output.output_string(" • Output path: " + output_path);
+        output.output_string(" • Kernel path: " + kernel_path);
+        output.output_string(" • Args: " + args.toString());
+        output.output_string(" • Platform executable: " + platform_executable);
+        // TODO use colors to make fire.dart output messages stand out from program and compiler output.
+        output.output_string(" • Colorful output enabled: " +
+            stdin.supportsAnsiEscapes.toString());
+        output.output_string("Auto restarting:");
+        output.output_string(" • Mode: " + auto_restart_mode.toString());
+        output.output_string("Root:");
+        output.output_string(" • Detected root: " + root.root.toString());
+        output.output_string(" • Detected package_config.json: " + root.target);
+        output.output_string("Watcher:");
+        output.output_string(
+            " • Expected lib directory path: " + lib_directory.toString());
+        output.output_string(
+            " • Watching lib directory: " + is_watching.toString());
+        output.output_string(
+            " • Invalidated files (" + invalidated.length.toString() + "):");
+        for (final uri in invalidated) {
+          output.output_string("   - " + uri.toString());
+        }
+        output.output_string("Terminal:");
+        output.output_string(" • Modes are set to false: " +
+            did_disable_terminal_modes.toString());
+        break;
+      case char_h:
+        // We print a tutorial on a lowercase 'h'.
+        output.output_string("fire.dart tutorial:");
+        // We hide some debug menus to not distract users.
+        // ignore: prefer_const_declarations
+        final show_hidden_options = false;
+        if (show_hidden_options) {
+          // Users usually won't need this.
+          output.output_string(" - press 'd' to view debug information.");
+          // THe terminal has its own way of exiting programs.
+          output.output_string(" - press 'q' to quit fire.");
+        }
+        // The output below is roughly ordered by importance.
+        output.output_string(" - press 'r' to hot restart.");
+        output.output_string(
+            " - press 's' to clear the screen and then hot restart.");
+        output.output_string(" - press 'h' to output a tutorial.");
+        output.output_string(
+            " - press 'm' to enable auto restarting on a change to the main entry script.");
+        output.output_string(
+            " - press 'n' to disable auto restarting on a change to the main entry script.");
+        break;
+      case char_m:
+        // On a lowercase 'm' we enable a mode where the whole program
+        // is restarted when the main file has been modified.
+        // 'm' and 'n' are separate commands and not a single toggle to
+        // give each command idempotency which improves UX.
+        switch (auto_restart_mode) {
+          case AutoRestartMode.none:
+            auto_restart_mode = AutoRestartMode.on_entry_changed;
+            output.output_string("> Auto restart was enabled.");
+            break;
+          case AutoRestartMode.on_entry_changed:
+            output.output_string("> Auto restart is already enabled.");
+            break;
+        }
+        break;
+      case char_n:
+        // On a lowercase 'n' we disable the auto restart mode.
+        // 'm' and 'n' are separate commands and not a single toggle to
+        // give each command idempotency which improves UX.
+        switch (auto_restart_mode) {
+          case AutoRestartMode.none:
+            output.output_string("> Auto restart is already disabled.");
+            break;
+          case AutoRestartMode.on_entry_changed:
+            auto_restart_mode = AutoRestartMode.none;
+            output.output_string("> Auto restart was disabled.");
+            break;
+        }
+        break;
       case char_q:
         // We quit fire on a single lowercase 'q'.
         final exit_code = await client.shutdown();
         exit(exit_code);
-      restart:
       case char_r:
-        // We restart the application on a single lowercase 'r'.
-        _output("> restarting...");
-        _output("> done, took " + await _measure_in_ms(fn: reload));
-        await run();
+        await restart_run(name: "restarting");
         break;
       case char_s:
-        // We clear the view slightly on a lowercase 's'
-        // and continue with a lowercase 'r'.
-        for (int i = 0; i < 10; i++) {
-          _output("");
-        }
-        continue restart;
+        await clear_restart(name: "clear restarting");
+        break;
       case char_linefeed:
         // We output a new line and don't warn about unexpected input.
         // Why? It is common to 'spam' the terminal with
         // newlines to introduce a bunch of empty
         // lines as an ad-hoc way to clear the terminal.
         // These empty lines serve as a visual divider between
-        // previous output and new output and improve the UX.
-        _output("");
+        // previous output and new output which improves the UX.
+        output.output_string("");
         break;
       default:
         final input = String.fromCharCodes(bytes);
-        _output("> expected r to restart and q to exit, got '" + input + "'.");
+        output.output_string(
+          "> expected r to restart and q to exit, got '" + input + "'.",
+        );
     }
   }
 }
 
+abstract class FireOutputDelegate {
+  /// For warnings or informative messages.
+  void output_string(
+    final String str,
+  );
+
+  /// For caught errors.
+  void output_error(
+    final Object payload,
+    final StackTrace stack_trace,
+  );
+
+  /// For compiler output.
+  void output_compiler_output(
+    final Iterable<String> values,
+  );
+
+  /// For [Process] output.
+  void redirect_process(
+    final ProcessResult result,
+  );
+}
+
 // region internal
+enum AutoRestartMode {
+  /// Never restart automatically.
+  none,
+
+  /// Restart fire when the main file changed.
+  on_entry_changed,
+}
+
 _DiscoveredRoot _find({
   required final File file,
   required final String target,
@@ -219,18 +399,5 @@ class _DiscoveredRoot {
     required this.target,
     required this.root,
   });
-}
-
-Future<String> _measure_in_ms({
-  required final Future<void> Function() fn,
-}) async {
-  final stopwatch = Stopwatch();
-  stopwatch.start();
-  await fn();
-  stopwatch.stop();
-  final ms =
-      (stopwatch.elapsed.inMicroseconds / 1000).toStringAsFixed(2) + " ms";
-  stopwatch.reset();
-  return ms;
 }
 // endregion
