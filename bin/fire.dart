@@ -1,78 +1,50 @@
-import 'dart:io' show FileSystemEntity, ProcessResult, exit, stdout;
+// ignore_for_file: avoid_print
 
-import 'package:fire/fire.dart' show FireOutputDelegate, run_fire;
-import 'package:path/path.dart' as path;
-import 'package:stack_trace/stack_trace.dart' show Trace;
+import 'dart:io';
 
-Future<void> main(
-  final List<String> args,
-) async {
-  if (args.isEmpty) {
-    print("> usage: fire file.dart [arguments].");
+import 'package:fire/fire.dart';
+import 'package:path/path.dart';
+
+Future<void> main(List<String> arguments) async {
+  if (arguments.isEmpty) {
+    print('> usage: fire file.dart [arguments].');
     exit(1);
-  } else {
-    final file_path = args[0];
-    if (FileSystemEntity.isFileSync(file_path)) {
-      await run_fire(
-        file_path: file_path,
-        output_path: path.setExtension(file_path, ".dill"),
-        kernel_path: "lib/_internal/vm_platform_strong.dill",
-        args: [
-          if (args.isNotEmpty) ...args.sublist(1, args.length),
-        ],
-        output: _FireOutputDelegateImpl(
-          output: stdout.writeln,
-        ),
-      );
-    } else {
-      print("'" + file_path + "' not found or isn't a file.");
-      exit(2);
+  }
+
+  var inputPath = normalize(arguments[0]);
+  var inputType = FileSystemEntity.typeSync(inputPath);
+
+  if (inputType != FileSystemEntityType.file) {
+    print("'$inputPath' not found or isn't a file.");
+    exit(2);
+  }
+
+  var outputPath = setExtension(inputPath, '.dill');
+
+  var sdkPath = dirname(dirname(Platform.resolvedExecutable));
+  var kernelPath = join(sdkPath, 'lib', '_internal', 'vm_platform_strong.dill');
+
+  var verbose = true;
+
+  Runner runner;
+
+  try {
+    runner = await Runner.start(
+      inputPath,
+      outputPath,
+      kernelPath: kernelPath,
+    );
+  } catch (error, stackTrace) {
+    print(error);
+
+    if (verbose) {
+      print(stackTrace);
     }
-  }
-}
 
-class _FireOutputDelegateImpl implements FireOutputDelegate {
-  final void Function(String) output;
-
-  const _FireOutputDelegateImpl({
-    required this.output,
-  });
-
-  @override
-  void output_error(
-    final Object payload,
-    final StackTrace stack_trace,
-  ) {
-    output(payload.toString());
-    output(Trace.format(stack_trace));
+    exit(3);
   }
 
-  @override
-  void output_string(
-    final String str,
-  ) {
-    output(str);
-  }
+  // ...
 
-  @override
-  void output_compiler_output(
-    final Iterable<String> values,
-  ) {
-    for (final line in values) {
-      output(line);
-    }
-  }
-
-  @override
-  void redirect_process(
-    final ProcessResult result,
-  ) {
-    // TODO https://stackoverflow.com/questions/33251129/what-is-the-best-way-to-stream-stdout-from-a-process-in-dart
-    if (result.stdout != null) {
-      output(result.stdout.toString().trimRight());
-    }
-    if (result.stderr != null) {
-      output(result.stderr.toString().trimRight());
-    }
-  }
+  exitCode = await runner.shutdown();
 }

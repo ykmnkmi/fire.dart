@@ -1,11 +1,11 @@
 [![Pub Package](https://img.shields.io/pub/v/fire.svg)](https://pub.dev/packages/fire)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Hot restart for Dart console application with fast incremental compilation.
+Hot-Restart and Hot-Reload for Dart console application with fast incremental compilation.
 
 ## Why do I need this?
 
-If your console application compiles too long before running, and `dart run`, which is now supports incremental compilation, seems too slow.
+If your console application compiles too long before running seems too slow.
 
 ## Install
 
@@ -46,9 +46,9 @@ While running creates `bin/cat.dill` incremental kernel snapshot.
 
 ## ToDo
 
-* Add `args` package and more options
-* Hot reload with Flutter like `reassemble`
-* `build_runner` integration (if possible)
+* Use `args` package
+* Hot-Reload with Flutter like `reassemble`
+* `build_runner` integration (if possible, or alternative solution)
 * AOT compilation, [it's impossible for now](https://github.com/dart-lang/sdk/issues/47322)
 
 ## Alternatives
