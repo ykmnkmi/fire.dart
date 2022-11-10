@@ -6,45 +6,48 @@ import 'package:fire/fire.dart';
 import 'package:path/path.dart';
 
 Future<void> main(List<String> arguments) async {
-  if (arguments.isEmpty) {
-    print('> usage: fire file.dart [arguments].');
-    exit(1);
+  String inputPath;
+  String outputPath;
+
+  switch (arguments.length) {
+    case 1:
+      inputPath = normalize(arguments[0]);
+      outputPath = setExtension(inputPath, '.dill');
+      break;
+    case 2:
+      inputPath = normalize(arguments[0]);
+      outputPath = normalize(arguments[1]);
+      break;
+    default:
+      print('> usage: fire file.dart [arguments].');
+      exit(1);
   }
 
-  var inputPath = normalize(arguments[0]);
   var inputType = FileSystemEntity.typeSync(inputPath);
 
   if (inputType != FileSystemEntityType.file) {
     print("'$inputPath' not found or isn't a file.");
-    exit(2);
+    exit(1);
   }
 
-  var outputPath = setExtension(inputPath, '.dill');
-
-  var sdkPath = dirname(dirname(Platform.resolvedExecutable));
-  var kernelPath = join(sdkPath, 'lib', '_internal', 'vm_platform_strong.dill');
-
-  var verbose = true;
-
-  Runner runner;
+  Compiler compiler;
 
   try {
-    runner = await Runner.start(
-      inputPath,
-      outputPath,
-      kernelPath: kernelPath,
-    );
+    compiler = await Compiler.start(inputPath, outputPath);
   } catch (error, stackTrace) {
     print(error);
-
-    if (verbose) {
-      print(stackTrace);
-    }
-
-    exit(3);
+    print(stackTrace);
+    exit(1);
   }
 
-  // ...
+  try {
+    var invalidatedUris = <Uri>[toUri(inputPath)];
+    await compiler.compile(invalidatedUris);
+  } catch (error, stackTrace) {
+    print(error);
+    print(stackTrace);
+    exit(1);
+  }
 
-  exitCode = await runner.shutdown();
+  exitCode = await compiler.shutdown();
 }
