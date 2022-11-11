@@ -8,11 +8,14 @@ import 'package:path/path.dart';
 const String kernelPath = 'lib/_internal/vm_platform_strong.dill';
 
 class Compiler {
-  Compiler(this.client);
+  Compiler(this.client, {required this.inputUri});
 
   final FrontendServerClient client;
 
-  Future<bool> compile([List<Uri>? invalidatedUris]) async {
+  final Uri inputUri;
+
+  Future<bool> compile([List<Uri>? additionalInvalidatedUris]) async {
+    var invalidatedUris = <Uri>[inputUri, ...?additionalInvalidatedUris];
     var result = await client.compile(invalidatedUris);
 
     if (result.dillOutput == null) {
@@ -54,7 +57,7 @@ class Compiler {
       packagesJson: packagesJsonPath,
     );
 
-    return Compiler(client);
+    return Compiler(client, inputUri: toUri(inputPath));
   }
 }
 
