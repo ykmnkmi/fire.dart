@@ -7,36 +7,62 @@ import 'package:path/path.dart';
 
 const String kernelPath = 'lib/_internal/vm_platform_strong.dill';
 
+class CompilerResult {
+  CompilerResult({required this.isCompiled, this.output = const <String>[]});
+
+  final bool isCompiled;
+
+  final List<String> output;
+}
+
 class Compiler {
-  Compiler(this.client, {required this.inputUri});
+  Compiler(this.client);
 
   final FrontendServerClient client;
 
-  final Uri inputUri;
-
-  Future<bool> compile([List<Uri>? additionalInvalidatedUris]) async {
-    var invalidatedUris = <Uri>[inputUri, ...?additionalInvalidatedUris];
+  Future<CompilerResult> compile(
+    Set<String> invalidatedPath, {
+    bool full = true,
+  }) async {
+    var invalidatedUris = invalidatedPath.map<Uri>(toUri).toList();
     var result = await client.compile(invalidatedUris);
+    var isCompiled = result.dillOutput != null && result.errorCount == 0;
+    var outputLines = result.compilerOutputLines.toList();
 
-    if (result.dillOutput == null) {
+    if (isCompiled) {
+      client.accept();
+
+      if (full) {
+        client.reset();
+      }
+    } else {
       await client.reject();
-      return false;
     }
 
-    if (result.errorCount > 0) {
-      await client.reject();
-      return false;
-    }
+    return CompilerResult(isCompiled: isCompiled, output: outputLines);
+  }
 
+  void accept() {
     client.accept();
-    return true;
+  }
+
+  void reset() {
+    client.reset();
+  }
+
+  Future<void> reject() async {
+    await client.reject();
   }
 
   Future<int> shutdown() {
     return client.shutdown();
   }
 
-  static Future<Compiler> start(String inputPath, String outputPath) async {
+  static Future<Compiler> start(
+    String inputPath,
+    String outputPath, {
+    bool verbose = false,
+  }) async {
     var fileUri = toUri(absolute(inputPath));
     var packageConfig = await findPackageConfigUri(fileUri, loader: loader);
 
@@ -55,9 +81,10 @@ class Compiler {
       outputPath,
       kernelPath,
       packagesJson: packagesJsonPath,
+      verbose: verbose,
     );
 
-    return Compiler(client, inputUri: toUri(inputPath));
+    return Compiler(client);
   }
 }
 
