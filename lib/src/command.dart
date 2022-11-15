@@ -2,7 +2,6 @@ import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:fire/src/exception.dart';
 
-/// A CLI command.
 abstract class CliCommand extends Command<int> {
   CliCommand() {
     argParser

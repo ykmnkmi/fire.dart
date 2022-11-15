@@ -5,7 +5,10 @@ import 'package:frontend_server_client/frontend_server_client.dart';
 import 'package:package_config/package_config.dart';
 import 'package:path/path.dart';
 
-const String kernelPath = 'lib/_internal/vm_platform_strong.dill';
+enum CompilerTarget implements Enum {
+  dartdevc,
+  vm,
+}
 
 class CompilerResult {
   CompilerResult({required this.isCompiled, this.output = const <String>[]});
@@ -22,7 +25,7 @@ class Compiler {
 
   Future<CompilerResult> compile(
     Set<String> invalidatedPath, {
-    bool full = true,
+    bool reset = true,
   }) async {
     var invalidatedUris = invalidatedPath.map<Uri>(toUri).toList();
     var result = await client.compile(invalidatedUris);
@@ -32,7 +35,7 @@ class Compiler {
     if (isCompiled) {
       client.accept();
 
-      if (full) {
+      if (reset) {
         client.reset();
       }
     } else {
@@ -61,14 +64,15 @@ class Compiler {
   static Future<Compiler> start(
     String inputPath,
     String outputPath, {
+    CompilerTarget target = CompilerTarget.vm,
     bool verbose = false,
   }) async {
     var fileUri = toUri(absolute(inputPath));
     var packageConfig = await findPackageConfigUri(fileUri, loader: loader);
 
     if (packageConfig == null) {
-      // TODO(*): update error
-      throw Exception('not found: $inputPath');
+      // TODO(*): add error message
+      throw ArgumentError.value(inputPath, 'inputPath');
     }
 
     var package = packageConfig.packages.last;
@@ -76,13 +80,28 @@ class Compiler {
     var packageConfigPath = join('.dart_tool', 'package_config.json');
     var packagesJsonPath = join(packageRootPath, packageConfigPath);
 
-    var client = await FrontendServerClient.start(
-      inputPath,
-      outputPath,
-      kernelPath,
-      packagesJson: packagesJsonPath,
-      verbose: verbose,
-    );
+    FrontendServerClient client;
+
+    switch (target) {
+      case CompilerTarget.dartdevc:
+        client = await DartDevcFrontendServerClient.start(
+          inputPath,
+          outputPath,
+          dartdevcModuleFormat: 'amd',
+          packagesJson: packagesJsonPath,
+          verbose: verbose,
+        );
+
+        break;
+      case CompilerTarget.vm:
+        client = await FrontendServerClient.start(
+          inputPath,
+          outputPath,
+          'lib/_internal/vm_platform_strong.dill',
+          packagesJson: packagesJsonPath,
+          verbose: verbose,
+        );
+    }
 
     return Compiler(client);
   }

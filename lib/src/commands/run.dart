@@ -7,12 +7,13 @@ import 'package:fire/src/compiler.dart';
 import 'package:path/path.dart';
 import 'package:watcher/watcher.dart';
 
-/// Restart modes.
-enum RestartMode {
-  /// Restart manually.
-  manual,
+enum CleanMode {
+  incremental,
+  all,
+}
 
-  /// Restart when the main file changed.
+enum RestartMode {
+  manual,
   onEntryChanged,
 }
 
@@ -51,6 +52,23 @@ class Run extends CliCommand {
     return '${super.invocation} <file-path>';
   }
 
+  bool get watch {
+    return getBoolean('watch');
+  }
+
+  CleanMode get clean {
+    var clean = getString('clean');
+
+    switch (clean) {
+      case 'incremental':
+        return CleanMode.incremental;
+      case 'all':
+        return CleanMode.all;
+      default:
+        throw UnsupportedError('CleanMode: $clean.');
+    }
+  }
+
   String get inputPath {
     var rest = argResults.rest;
 
@@ -61,16 +79,8 @@ class Run extends CliCommand {
     return rest[0];
   }
 
-  bool get watch {
-    return getBoolean('watch');
-  }
-
-  String? get clean {
-    return getString('clean');
-  }
-
-  String? get outputPath {
-    return getString('output');
+  String get outputPath {
+    return getString('output') ?? setExtension(inputPath, '.dill');
   }
 
   List<String> get rest {
@@ -86,36 +96,38 @@ class Run extends CliCommand {
   @override
   Future<int> handle() async {
     var inputPath = this.inputPath;
-    var outputPath = this.outputPath ?? setExtension(inputPath, '.dill');
+    var outputPath = this.outputPath;
 
-    var compiler = await Compiler.start(inputPath, outputPath);
+    var compiler = await Compiler.start(
+      inputPath,
+      outputPath,
+      verbose: verbose,
+    );
+
     var invalidatedPaths = <String>{inputPath};
-
     var timer = Stopwatch();
 
-    Future<void> compileKernel({bool full = true}) async {
+    Future<void> compileKernel({bool reset = true}) async {
       if (invalidatedPaths.isEmpty) {
-        if (full) {
+        if (reset) {
           compiler.reset();
         }
 
         return;
       }
 
-      var prefix = full ? '>' : '*';
+      var prefix = reset ? '>' : '*';
       stdout.writeln('$prefix Compiling ...');
       timer.start();
 
       try {
-        var result = await compiler.compile(invalidatedPaths, full: full);
+        var result = await compiler.compile(invalidatedPaths, reset: reset);
+        timer.stop();
 
         if (result.isCompiled) {
           stdout.writeln('* Compiling done, took ${timer.elapsed}');
           invalidatedPaths.clear();
-          return;
-        }
-
-        if (result.output.isEmpty) {
+        } else if (result.output.isEmpty) {
           stdout
             ..writeln('* Compiling done, no compilation result')
             ..writeAll(result.output, '\n ');
@@ -128,11 +140,9 @@ class Run extends CliCommand {
         stderr
           ..writeln(error)
           ..writeln(stackTrace);
-      } finally {
-        timer
-          ..stop()
-          ..reset();
       }
+
+      timer.reset();
     }
 
     var arguments = <String>[outputPath, ...rest];
@@ -178,7 +188,7 @@ class Run extends CliCommand {
       stdin.echoMode = false;
       stdin.lineMode = false;
     } on StdinException {
-      // ...
+      // TODO(*): log error
     }
 
     void restoreStdinMode() {
@@ -188,50 +198,26 @@ class Run extends CliCommand {
         if (previousLineMode) {
           stdin.echoMode = previousEchoMode;
         }
-      } on StdinException catch (error) {
-        print(error);
+      } on StdinException {
+        // TODO(*): log error
       }
     }
 
     group.add(stdin.map<String>(String.fromCharCodes));
     group.add(ProcessSignal.sigint.watch());
 
-    Future<void> watchFolder(
-      StreamGroup<Object?> group,
-      String folder, {
-      bool printIfNotPossible = false,
-    }) async {
-      if (FileSystemEntity.isDirectorySync(folder)) {
-        var watcher = DirectoryWatcher(folder);
-        group.add(watcher.events.where(isSourceEvent));
-        // await watcher.ready;
-        stdout.writeln("* Watching '$folder' directory.");
-      } else if (printIfNotPossible) {
-        stdout
-          ..writeln('* Not watching the $folder folder.')
-          ..writeln('  Because it does not exist or it is not folder.');
-      }
-    }
-
     if (isWithin('bin', inputPath)) {
       await watchFolder(group, 'bin');
     }
 
-    await watchFolder(group, 'lib', printIfNotPossible: true);
+    if (isWithin('lib', inputPath)) {
+      await watchFolder(group, 'lib', printIfNotPossible: true);
+    } else {
+      await watchFile(group, inputPath, printIfNotPossible: true);
+    }
 
     if (isWithin('test', inputPath)) {
       await watchFolder(group, 'test');
-    }
-
-    final supportsAnsiEscapes = stdout.supportsAnsiEscapes;
-
-    void clearScreen() {
-      // ...
-      if (supportsAnsiEscapes) {
-        stdout.write('\x1b[2J\x1b[H');
-      } else {
-        stdout.writeln('* Not supported.');
-      }
     }
 
     try {
@@ -259,7 +245,7 @@ class Run extends CliCommand {
               break;
           }
 
-          await compileKernel(full: false);
+          await compileKernel(reset: false);
           continue;
         }
 
@@ -313,10 +299,10 @@ class Run extends CliCommand {
 
   @override
   Future<void> cleanup() async {
-    var outputPath = this.outputPath ?? setExtension(inputPath, '.dill');
+    var outputPath = this.outputPath;
 
     switch (clean) {
-      case 'all':
+      case CleanMode.all:
         var file = File(outputPath);
 
         if (file.existsSync()) {
@@ -326,7 +312,7 @@ class Run extends CliCommand {
         continue incremental;
 
       incremental:
-      case 'incremental':
+      case CleanMode.incremental:
         var file = File('$outputPath.incremental.dill');
 
         if (file.existsSync()) {
@@ -334,10 +320,6 @@ class Run extends CliCommand {
         }
 
         return;
-
-      default:
-        // ...
-        throw UnsupportedError("Clean mode: '$clean'.");
     }
   }
 }
@@ -346,9 +328,54 @@ bool isSourceEvent(WatchEvent event) {
   return event.path.endsWith('.dart');
 }
 
+Future<void> watchFile(
+  StreamGroup<Object?> group,
+  String file, {
+  bool printIfNotPossible = false,
+}) async {
+  if (FileSystemEntity.isFileSync(file)) {
+    var watcher = FileWatcher(file);
+    group.add(watcher.events);
+    // await watcher.ready;
+    stdout.writeln("* Watching '$file' file.");
+  } else if (printIfNotPossible) {
+    stdout
+      ..writeln('* Not watching the $file file.')
+      ..writeln('  Because it does not exist or it is not a file.');
+  }
+}
+
+Future<void> watchFolder(
+  StreamGroup<Object?> group,
+  String folder, {
+  bool printIfNotPossible = false,
+}) async {
+  if (FileSystemEntity.isDirectorySync(folder)) {
+    var watcher = DirectoryWatcher(folder);
+    group.add(watcher.events.where(isSourceEvent));
+    // await watcher.ready;
+    stdout.writeln("* Watching '$folder' directory.");
+  } else if (printIfNotPossible) {
+    stdout
+      ..writeln('* Not watching the $folder folder.')
+      ..writeln('  Because it does not exist or it is not a folder.');
+  }
+}
+
+void clearScreen() {
+  if (Platform.isWindows) {
+    // TODO(*): windows: reset buffer
+    stdout.writeln('* Not supported yet.');
+  } else if (stdout.supportsAnsiEscapes) {
+    stdout.write('\x1b[2J\x1b[H');
+  } else {
+    stdout.writeln('* Not supported.');
+  }
+}
+
 void printRunModeUsage({bool detailed = false}) {
   if (detailed) {
-    // ...
+    // TODO(*): print detailed output
     return;
   }
 
