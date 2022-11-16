@@ -5,11 +5,6 @@ import 'package:frontend_server_client/frontend_server_client.dart';
 import 'package:package_config/package_config.dart';
 import 'package:path/path.dart';
 
-enum CompilerTarget implements Enum {
-  dartdevc,
-  vm,
-}
-
 class CompilerResult {
   CompilerResult({required this.isCompiled, this.output = const <String>[]});
 
@@ -64,7 +59,6 @@ class Compiler {
   static Future<Compiler> start(
     String inputPath,
     String outputPath, {
-    CompilerTarget target = CompilerTarget.vm,
     bool verbose = false,
   }) async {
     var fileUri = toUri(absolute(inputPath));
@@ -80,28 +74,13 @@ class Compiler {
     var packageConfigPath = join('.dart_tool', 'package_config.json');
     var packagesJsonPath = join(packageRootPath, packageConfigPath);
 
-    FrontendServerClient client;
-
-    switch (target) {
-      case CompilerTarget.dartdevc:
-        client = await DartDevcFrontendServerClient.start(
-          inputPath,
-          outputPath,
-          dartdevcModuleFormat: 'amd',
-          packagesJson: packagesJsonPath,
-          verbose: verbose,
-        );
-
-        break;
-      case CompilerTarget.vm:
-        client = await FrontendServerClient.start(
-          inputPath,
-          outputPath,
-          'lib/_internal/vm_platform_strong.dill',
-          packagesJson: packagesJsonPath,
-          verbose: verbose,
-        );
-    }
+    var client = await FrontendServerClient.start(
+      inputPath,
+      outputPath,
+      'lib/_internal/vm_platform_strong.dill',
+      packagesJson: packagesJsonPath,
+      verbose: verbose,
+    );
 
     return Compiler(client);
   }

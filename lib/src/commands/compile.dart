@@ -8,12 +8,6 @@ class Compile extends CliCommand {
   Compile() {
     argParser
       ..addSeparator('Compile options:')
-      ..addOption('target', //
-          abbr: 't',
-          help: 'Kernel target type.',
-          valueHelp: 'mode',
-          allowed: <String>{'dartdevc', 'vm'},
-          defaultsTo: 'vm')
       ..addOption('output', //
           abbr: 'o',
           help: 'Path to the output file.',
@@ -33,19 +27,6 @@ class Compile extends CliCommand {
   @override
   String get invocation {
     return '${super.invocation} <file-path>';
-  }
-
-  CompilerTarget get target {
-    var target = getString('target');
-
-    switch (target) {
-      case 'dartdevc':
-        return CompilerTarget.dartdevc;
-      case 'vm':
-        return CompilerTarget.vm;
-      default:
-        throw StateError('Unreachable.');
-    }
   }
 
   String get inputPath {
@@ -70,7 +51,6 @@ class Compile extends CliCommand {
     var compiler = await Compiler.start(
       inputPath,
       outputPath,
-      target: target,
       verbose: verbose,
     );
 
@@ -95,6 +75,7 @@ class Compile extends CliCommand {
           ..writeAll(result.output, '\n ');
       }
 
+      await compiler.shutdown();
       return 0;
     } catch (error, stackTrace) {
       stderr
@@ -102,8 +83,6 @@ class Compile extends CliCommand {
         ..writeln(stackTrace);
 
       return 1;
-    } finally {
-      await compiler.shutdown();
     }
   }
 }
