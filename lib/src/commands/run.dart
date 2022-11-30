@@ -5,36 +5,39 @@ import 'package:async/async.dart';
 import 'package:fire/src/command.dart';
 import 'package:fire/src/compiler.dart';
 import 'package:path/path.dart';
+import 'package:stream_transform/stream_transform.dart';
 import 'package:watcher/watcher.dart';
 
 enum CleanMode {
-  incremental,
   all,
+  incremental,
 }
 
 enum RestartMode {
-  manual,
   onEntryChanged,
+  manual,
 }
 
 class Run extends CliCommand {
   Run() {
     argParser
       ..addSeparator('Run options:')
-      ..addFlag('watch', //
-          abbr: 'w',
-          help: '',
-          negatable: false)
-      ..addOption('clean', //
+      ..addFlag('watch', abbr: 'w', help: 'Enable watcher.', negatable: false)
+      ..addFlag('watch-lib', help: "Watch 'lib' folder.", defaultsTo: true)
+      ..addOption('restart-mode',
+          abbr: 'R',
+          help: 'Watch restart mode.',
+          valueHelp: 'mode',
+          allowed: <String>{'on-entry-changed', 'manual'},
+          defaultsTo: 'on-entry-changed')
+      ..addOption('clean',
           abbr: 'c',
           help: 'Clean produced files.',
           valueHelp: 'mode',
           allowed: <String>{'incremental', 'all'},
           defaultsTo: 'incremental')
-      ..addOption('output', //
-          abbr: 'o',
-          help: 'Path to the output file.',
-          valueHelp: 'file-path');
+      ..addOption('output',
+          abbr: 'o', help: 'Path to the output file.', valueHelp: 'file-path');
   }
 
   @override
@@ -54,6 +57,23 @@ class Run extends CliCommand {
 
   bool get watch {
     return getBoolean('watch');
+  }
+
+  bool get watchLib {
+    return getBoolean('watch-lib');
+  }
+
+  RestartMode get restartMode {
+    var restartMode = getString('restart-mode');
+
+    switch (restartMode) {
+      case 'on-entry-changed':
+        return RestartMode.onEntryChanged;
+      case 'manual':
+        return RestartMode.manual;
+      default:
+        throw UnsupportedError('RestartMode: $restartMode.');
+    }
   }
 
   CleanMode get clean {
@@ -174,11 +194,6 @@ class Run extends CliCommand {
     await compileKernel();
     await runKernel();
 
-    if (!watch) {
-      await compiler.shutdown();
-      return 0;
-    }
-
     var group = StreamGroup<Object?>();
 
     var previousEchoMode = stdin.echoMode;
@@ -206,30 +221,31 @@ class Run extends CliCommand {
     group.add(stdin.map<String>(String.fromCharCodes));
     group.add(ProcessSignal.sigint.watch());
 
-    if (isWithin('bin', inputPath)) {
-      await watchFolder(group, 'bin');
-    }
+    var restartOnInputChange = restartMode == RestartMode.onEntryChanged;
 
-    if (isWithin('lib', inputPath)) {
-      await watchFolder(group, 'lib', printIfNotPossible: true);
-    } else {
-      await watchFile(group, inputPath, printIfNotPossible: true);
-    }
-
-    if (isWithin('test', inputPath)) {
-      await watchFolder(group, 'test');
+    if (watch) {
+      if (isWithin('bin', inputPath)) {
+        await watchFolder(group, 'bin');
+      } else if (isWithin('lib', inputPath)) {
+        await watchFolder(group, 'lib', printIfNotPossible: true);
+      } else if (watchLib && FileSystemEntity.isDirectorySync('lib')) {
+        await watchFolder(group, 'lib', printIfNotPossible: true);
+      } else if (isWithin('test', inputPath)) {
+        await watchFolder(group, 'test');
+      } else if (restartOnInputChange) {
+        await watchFile(group, inputPath);
+      }
     }
 
     try {
+      printRunModeUsage();
+
       await for (var event in group.stream) {
         if (event == 'r') {
           stdout.writeln('> Restarting ...');
           await compileKernel();
           await runKernel();
-          continue;
-        }
-
-        if (event is WatchEvent) {
+        } else if (event is WatchEvent) {
           switch (event.type) {
             case ChangeType.ADD:
               stdout.writeln('* Add ${event.path}');
@@ -245,8 +261,11 @@ class Run extends CliCommand {
               break;
           }
 
-          await compileKernel(reset: false);
-          continue;
+          if (restartOnInputChange && event.path == inputPath) {
+            stdout.writeln('> Restarting ...');
+            await compileKernel();
+            await runKernel();
+          }
         }
 
         if (event == 'q') {
@@ -281,7 +300,7 @@ class Run extends CliCommand {
         if (event is String) {
           stdout.writeln("* Unknown key: '$event'");
         } else {
-          stdout.writeln('* Unknown event: $event');
+          stdout.writeln("* Unknown event: '$event'");
         }
       }
 
@@ -340,7 +359,7 @@ Future<void> watchFile(
     stdout.writeln("* Watching '$file' file.");
   } else if (printIfNotPossible) {
     stdout
-      ..writeln('* Not watching the $file file.')
+      ..writeln("* Can't watching the '$file' file.")
       ..writeln('  Because it does not exist or it is not a file.');
   }
 }
@@ -352,22 +371,22 @@ Future<void> watchFolder(
 }) async {
   if (FileSystemEntity.isDirectorySync(folder)) {
     var watcher = DirectoryWatcher(folder);
-    group.add(watcher.events.where(isSourceEvent));
+    group.add(watcher.events.debounce(Duration.zero).where(isSourceEvent));
     // await watcher.ready;
     stdout.writeln("* Watching '$folder' directory.");
   } else if (printIfNotPossible) {
     stdout
-      ..writeln('* Not watching the $folder folder.')
+      ..writeln("* Can't watching the '$folder' folder.")
       ..writeln('  Because it does not exist or it is not a folder.');
   }
 }
 
 void clearScreen() {
-  if (Platform.isWindows) {
+  if (stdout.supportsAnsiEscapes) {
+    stdout.write('\x1b[2J\x1b[H');
+  } else if (Platform.isWindows) {
     // TODO(*): windows: reset buffer
     stdout.writeln('* Not supported yet.');
-  } else if (stdout.supportsAnsiEscapes) {
-    stdout.write('\x1b[2J\x1b[H');
   } else {
     stdout.writeln('* Not supported.');
   }
@@ -382,6 +401,6 @@ void printRunModeUsage({bool detailed = false}) {
   stdout
     ..writeln('🔥 To restart press "r".')
     ..writeln('   To quit, press "q" or "Q" for force quit.')
-    ..writeln('   For a more detailed help message, press "h".')
+    ..writeln('   For a more detailed help message, press "H".')
     ..writeln();
 }

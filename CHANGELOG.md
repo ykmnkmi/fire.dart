@@ -1,4 +1,4 @@
-## 1.3.0-dev
+## 1.3.0-dev.6
 
 - _work in progress_
 

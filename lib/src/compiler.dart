@@ -61,11 +61,12 @@ class Compiler {
     String outputPath, {
     bool verbose = false,
   }) async {
+    var sdkRoot = dirname(dirname(Platform.resolvedExecutable));
+
     var fileUri = toUri(absolute(inputPath));
     var packageConfig = await findPackageConfigUri(fileUri, loader: loader);
 
     if (packageConfig == null) {
-      // TODO(*): add error message
       throw ArgumentError.value(inputPath, 'inputPath');
     }
 
@@ -79,6 +80,7 @@ class Compiler {
       outputPath,
       'lib/_internal/vm_platform_strong.dill',
       packagesJson: packagesJsonPath,
+      sdkRoot: sdkRoot,
       verbose: verbose,
     );
 

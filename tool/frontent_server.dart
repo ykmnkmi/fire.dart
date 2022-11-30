@@ -10,22 +10,19 @@ void main(List<String> arguments) {
   var sdk = dirname(bin);
   var lib = join(sdk, 'lib');
   var internal = join(lib, '_internal');
-  var dartdevcPlatform = toUri(join(internal, 'ddc_platform_sound.dill'));
   var vmPlatform = toUri(join(internal, 'vm_platform_strong.dill'));
   var packages = join('.dart_tool', 'package_config.json');
-
-  var dartdevc = true;
 
   arguments = <String>[
     snapshot,
     '--sdk-root',
     sdk,
     '--platform',
-    if (dartdevc) '$dartdevcPlatform' else '$vmPlatform',
+    '$vmPlatform',
     '--packages',
     packages,
     '--target',
-    if (dartdevc) 'dartdevc' else 'vm',
+    'vm',
     '--no-embed-source-text',
     '--sound-null-safety',
     '--no-emit-debug-symbols',
@@ -33,9 +30,8 @@ void main(List<String> arguments) {
     ...arguments,
   ];
 
-  var result = Process.runSync(dart, arguments, //
-      stdoutEncoding: null,
-      stderrEncoding: null);
+  var result = Process.runSync(dart, arguments,
+      stdoutEncoding: null, stderrEncoding: null);
   stdout.add(result.stdout as List<int>);
   stderr.add(result.stderr as List<int>);
 }

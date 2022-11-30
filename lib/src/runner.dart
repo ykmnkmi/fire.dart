@@ -19,11 +19,6 @@ class FireCommandRunner extends CommandRunner<int> {
   Future<int> run(Iterable<String> args) async {
     try {
       var argsList = args.toList();
-
-      if (argsList.isNotEmpty && !commands.containsKey(argsList.first)) {
-        argsList.insert(0, 'run');
-      }
-
       var argResults = parse(argsList);
       var code = await runCommand(argResults);
       //  ... error?

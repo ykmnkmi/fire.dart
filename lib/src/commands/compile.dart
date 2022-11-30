@@ -8,10 +8,8 @@ class Compile extends CliCommand {
   Compile() {
     argParser
       ..addSeparator('Compile options:')
-      ..addOption('output', //
-          abbr: 'o',
-          help: 'Path to the output file.',
-          valueHelp: 'file-path');
+      ..addOption('output',
+          abbr: 'o', help: 'Path to the output file.', valueHelp: 'file-path');
   }
 
   @override
