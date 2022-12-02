@@ -8,7 +8,7 @@ import 'package:fire/src/exception.dart';
 class FireCommandRunner extends CommandRunner<int> {
   static const commandName = 'fire';
 
-  static const commandDescription = 'Fast compiler for Dart CLI application.';
+  static const commandDescription = 'Fast compiler for Dart CLI applications.';
 
   FireCommandRunner() : super(commandName, commandDescription) {
     addCommand(Run());
@@ -16,27 +16,40 @@ class FireCommandRunner extends CommandRunner<int> {
   }
 
   @override
+  String get invocation {
+    return '$executableName <command> [options] input-file.dart';
+  }
+
+  @override
+  void printUsage() {
+    stdout.writeln(usage);
+  }
+
+  @override
   Future<int> run(Iterable<String> args) async {
+    int code;
+
     try {
       var argsList = args.toList();
       var argResults = parse(argsList);
-      var code = await runCommand(argResults);
       //  ... error?
-      return code ?? 1;
+      code = await runCommand(argResults) ?? 1;
     } on CliException catch (error, stackTrace) {
-      stderr
+      stdout
         ..writeln(error.message)
         ..writeln()
         ..writeln(stackTrace);
 
-      return 1;
+      code = 1;
     } on UsageException catch (error) {
-      stderr
+      stdout
         ..writeln(error.message)
         ..writeln()
         ..writeln(error.usage);
 
-      return 64;
+      code = 64;
     }
+
+    return code;
   }
 }

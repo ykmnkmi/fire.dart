@@ -53,9 +53,10 @@ class Compile extends CliCommand {
     );
 
     var timer = Stopwatch();
-
     stdout.writeln('> Compiling ...');
     timer.start();
+
+    int code;
 
     try {
       var result = await compiler.compile(const <String>{});
@@ -66,21 +67,23 @@ class Compile extends CliCommand {
       } else if (result.output.isEmpty) {
         stdout
           ..writeln('* Compiling done, no compilation result')
-          ..writeAll(result.output, '\n ');
+          ..writeAll(result.output, '\n  ');
       } else {
         stdout
           ..writeln('* Compiling done, no compilation result:')
-          ..writeAll(result.output, '\n ');
+          ..writeAll(result.output, '\n  ');
       }
 
       await compiler.shutdown();
-      return 0;
+      code = 0;
     } catch (error, stackTrace) {
-      stderr
+      stdout
         ..writeln(error)
         ..writeln(stackTrace);
 
-      return 1;
+      code = 1;
     }
+
+    return code;
   }
 }

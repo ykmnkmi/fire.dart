@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:fire/src/exception.dart';
@@ -52,6 +54,11 @@ abstract class CliCommand extends Command<int> {
   Future<int> handle();
 
   Future<void> cleanup() async {}
+
+  @override
+  void printUsage() {
+    stdout.writeln(usage);
+  }
 
   @override
   Future<int> run() async {

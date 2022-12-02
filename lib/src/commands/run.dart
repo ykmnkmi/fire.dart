@@ -11,6 +11,7 @@ import 'package:watcher/watcher.dart';
 enum CleanMode {
   all,
   incremental,
+  keep,
 }
 
 enum RestartMode {
@@ -21,11 +22,11 @@ enum RestartMode {
 class Run extends CliCommand {
   Run() {
     argParser
-      ..addSeparator('Run options:')
+      ..addFlag('run-in-shell', help: 'Run in shell.', negatable: false)
       ..addFlag('watch', abbr: 'w', help: 'Enable watcher.', negatable: false)
       ..addFlag('watch-lib', help: "Watch 'lib' folder.", defaultsTo: true)
       ..addOption('restart-mode',
-          abbr: 'R',
+          abbr: 'r',
           help: 'Watch restart mode.',
           valueHelp: 'mode',
           allowed: <String>{'on-entry-changed', 'manual'},
@@ -34,7 +35,7 @@ class Run extends CliCommand {
           abbr: 'c',
           help: 'Clean produced files.',
           valueHelp: 'mode',
-          allowed: <String>{'incremental', 'all'},
+          allowed: <String>{'keep', 'incremental', 'all'},
           defaultsTo: 'incremental')
       ..addOption('output',
           abbr: 'o', help: 'Path to the output file.', valueHelp: 'file-path');
@@ -53,6 +54,10 @@ class Run extends CliCommand {
   @override
   String get invocation {
     return '${super.invocation} <file-path>';
+  }
+
+  bool get runInShell {
+    return getBoolean('run-in-shell');
   }
 
   bool get watch {
@@ -93,7 +98,7 @@ class Run extends CliCommand {
     var rest = argResults.rest;
 
     if (rest.isEmpty) {
-      usageException('message');
+      usageException('No input file.');
     }
 
     return rest[0];
@@ -150,26 +155,32 @@ class Run extends CliCommand {
         } else if (result.output.isEmpty) {
           stdout
             ..writeln('* Compiling done, no compilation result')
-            ..writeAll(result.output, '\n ');
+            ..writeAll(result.output, '\n  ');
         } else {
           stdout
             ..writeln('* Compiling done, no compilation result:')
-            ..writeAll(result.output, '\n ');
+            ..writeAll(result.output, '\n  ');
         }
       } catch (error, stackTrace) {
-        stderr
-          ..writeln(error)
-          ..writeln(stackTrace);
+        stdout.writeln(error);
+        stdout.writeln(stackTrace);
       }
 
       timer.reset();
     }
 
     var arguments = <String>[outputPath, ...rest];
+    var runInShell = this.runInShell;
 
     Future<int> runKernel() async {
+      int code;
+
       try {
-        var result = await Process.run(Platform.executable, arguments);
+        var result = await Process.run(
+          Platform.executable,
+          arguments,
+          runInShell: runInShell,
+        );
 
         if (result.stdout is String) {
           var out = result.stdout as String;
@@ -178,21 +189,27 @@ class Run extends CliCommand {
 
         if (result.stderr is String) {
           var err = result.stderr as String;
-          stderr.writeln(err.trimRight());
+          stdout.writeln(err.trimRight());
         }
 
-        return result.exitCode;
+        code = result.exitCode;
       } catch (error, stackTrace) {
-        stderr
+        stdout
           ..writeln(error)
           ..writeln(stackTrace);
 
-        return 1;
+        code = 1;
       }
+
+      return code;
     }
 
     await compileKernel();
     await runKernel();
+
+    if (!watch) {
+      return await compiler.shutdown();
+    }
 
     var group = StreamGroup<Object?>();
 
@@ -223,28 +240,32 @@ class Run extends CliCommand {
 
     var restartOnInputChange = restartMode == RestartMode.onEntryChanged;
 
-    if (watch) {
-      if (isWithin('bin', inputPath)) {
-        await watchFolder(group, 'bin');
-      } else if (isWithin('lib', inputPath)) {
-        await watchFolder(group, 'lib', printIfNotPossible: true);
-      } else if (watchLib && FileSystemEntity.isDirectorySync('lib')) {
-        await watchFolder(group, 'lib', printIfNotPossible: true);
-      } else if (isWithin('test', inputPath)) {
-        await watchFolder(group, 'test');
-      } else if (restartOnInputChange) {
-        await watchFile(group, inputPath);
-      }
+    if (isWithin('bin', inputPath)) {
+      await watchFolder(group, 'bin');
+    } else if (isWithin('lib', inputPath)) {
+      await watchFolder(group, 'lib', printIfNotPossible: true);
+    } else if (watchLib && FileSystemEntity.isDirectorySync('lib')) {
+      await watchFolder(group, 'lib', printIfNotPossible: true);
+    } else if (isWithin('test', inputPath)) {
+      await watchFolder(group, 'test');
+    } else if (restartOnInputChange) {
+      await watchFile(group, inputPath);
     }
+
+    int code;
 
     try {
       printRunModeUsage();
 
+      Future<void> restart() async {
+        stdout.writeln('> Restarting ...');
+        await compileKernel();
+        await runKernel();
+      }
+
       await for (var event in group.stream) {
         if (event == 'r') {
-          stdout.writeln('> Restarting ...');
-          await compileKernel();
-          await runKernel();
+          await restart();
         } else if (event is WatchEvent) {
           switch (event.type) {
             case ChangeType.ADD:
@@ -261,59 +282,47 @@ class Run extends CliCommand {
               break;
           }
 
-          if (restartOnInputChange && event.path == inputPath) {
-            stdout.writeln('> Restarting ...');
-            await compileKernel();
-            await runKernel();
+          if (restartOnInputChange && equals(event.path, inputPath)) {
+            await restart();
           }
-        }
-
-        if (event == 'q') {
+        } else if (event == 'q') {
           stdout.writeln('> Closing ...');
           restoreStdinMode();
           break;
-        }
-
-        if (event == 'Q' || event is ProcessSignal) {
+        } else if (event == 'Q' || event is ProcessSignal) {
           stdout.writeln('> Forse closing ...');
           restoreStdinMode();
           exit(0);
-        }
-
-        if (event == 's') {
+        } else if (event == 's') {
           clearScreen();
-          continue;
-        }
-
-        if (event == 'h') {
-          stdout.writeln();
+        } else if (event == 'S') {
+          clearScreen();
+          await restart();
+        } else if (event == 'h') {
+          stdout.writeln('');
           printRunModeUsage();
-          continue;
-        }
-
-        if (event == 'H') {
-          stdout.writeln();
+        } else if (event == 'H') {
+          stdout.writeln('');
           printRunModeUsage(detailed: true);
-          continue;
-        }
-
-        if (event is String) {
+        } else if (event is String) {
           stdout.writeln("* Unknown key: '$event'");
         } else {
-          stdout.writeln("* Unknown event: '$event'");
+          stdout.writeln('* Unknown event: $event');
         }
       }
 
       await group.close();
       await compiler.shutdown();
-      return 0;
+      code = 0;
     } catch (error, stackTrace) {
-      stderr
+      stdout
         ..writeln(error)
         ..writeln(stackTrace);
 
-      return 1;
+      code = 1;
     }
+
+    return code;
   }
 
   @override
@@ -329,7 +338,6 @@ class Run extends CliCommand {
         }
 
         continue incremental;
-
       incremental:
       case CleanMode.incremental:
         var file = File('$outputPath.incremental.dill');
@@ -339,6 +347,9 @@ class Run extends CliCommand {
         }
 
         return;
+      case CleanMode.keep:
+        // Do nothing.
+        break;
     }
   }
 }
@@ -393,14 +404,15 @@ void clearScreen() {
 }
 
 void printRunModeUsage({bool detailed = false}) {
+  stdout
+    ..writeln('* To restart press "r".')
+    ..writeln('  To quit, press "q" or "Q" for force quit.')
+    ..writeln('  To clear screen, press "s".');
   if (detailed) {
-    // TODO(*): print detailed output
-    return;
+    stdout.writeln('  To quit, press "q" or "Q" for force quit.');
+  } else {
+    stdout.writeln('  For a more detailed help message, press "H".');
   }
 
-  stdout
-    ..writeln('🔥 To restart press "r".')
-    ..writeln('   To quit, press "q" or "Q" for force quit.')
-    ..writeln('   For a more detailed help message, press "H".')
-    ..writeln();
+  stdout.writeln();
 }
