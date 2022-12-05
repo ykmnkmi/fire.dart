@@ -34,13 +34,6 @@ class FireCommandRunner extends CommandRunner<int> {
       var argResults = parse(argsList);
       //  ... error?
       code = await runCommand(argResults) ?? 1;
-    } on CliException catch (error, stackTrace) {
-      stdout
-        ..writeln(error.message)
-        ..writeln()
-        ..writeln(stackTrace);
-
-      code = 1;
     } on UsageException catch (error) {
       stdout
         ..writeln(error.message)
@@ -48,6 +41,16 @@ class FireCommandRunner extends CommandRunner<int> {
         ..writeln(error.usage);
 
       code = 64;
+    } on CliException catch (error) {
+      stdout.writeln(error.message);
+      code = 1;
+    } catch (error, stackTrace) {
+      stdout
+        ..writeln(error)
+        ..writeln()
+        ..writeln(stackTrace);
+
+      code = 1;
     }
 
     return code;

@@ -32,17 +32,19 @@ $ dart pub global run fire
 Here's an example of running a console application:
 
 ```console
-$ fire bin/cat.dart example/example.dart
-> watching 'lib' folder.
-> compiling done, took 0:00:00.000054
+$ fire run -w bin/cat.dart example/example.dart
+> Compiling ...
+* Compiling done, took 0:00:00.424890
 void main() {
   print('hello cat!');
 }
 
-> press r to restart and q to exit.
-```
+* Watching 'bin' directory.
+* To restart press "r".
+  To quit, press "q" or "Q" to force quit.
+  For a more detailed help message, press "H".
 
-While running creates `bin/cat.dill` incremental kernel snapshot.
+```
 
 ## ToDo
 

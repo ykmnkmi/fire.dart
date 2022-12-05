@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:async/async.dart';
 import 'package:fire/src/command.dart';
 import 'package:fire/src/compiler.dart';
+import 'package:fire/src/exception.dart';
 import 'package:path/path.dart';
 import 'package:stream_transform/stream_transform.dart';
 import 'package:watcher/watcher.dart';
@@ -22,23 +23,21 @@ enum RestartMode {
 class Run extends CliCommand {
   Run() {
     argParser
-      ..addFlag('run-in-shell', help: 'Run in shell.', negatable: false)
       ..addFlag('watch', abbr: 'w', help: 'Enable watcher.', negatable: false)
       ..addFlag('watch-lib', help: "Watch 'lib' folder.", defaultsTo: true)
+      ..addFlag('run-in-shell', help: 'Run in shell.', negatable: false)
       ..addOption('restart-mode',
-          abbr: 'r',
           help: 'Watch restart mode.',
           valueHelp: 'mode',
           allowed: <String>{'on-entry-changed', 'manual'},
           defaultsTo: 'on-entry-changed')
       ..addOption('clean',
-          abbr: 'c',
           help: 'Clean produced files.',
           valueHelp: 'mode',
           allowed: <String>{'keep', 'incremental', 'all'},
           defaultsTo: 'incremental')
       ..addOption('output',
-          abbr: 'o', help: 'Path to the output file.', valueHelp: 'file-path');
+          abbr: 'o', help: 'Path to the kernel file.', valueHelp: 'file-path');
   }
 
   @override
@@ -121,6 +120,11 @@ class Run extends CliCommand {
   @override
   Future<int> handle() async {
     var inputPath = this.inputPath;
+
+    if (!FileSystemEntity.isFileSync(inputPath)) {
+      throw CliException("Input file '$inputPath' not found.");
+    }
+
     var outputPath = this.outputPath;
 
     var compiler = await Compiler.start(
@@ -406,10 +410,10 @@ void clearScreen() {
 void printRunModeUsage({bool detailed = false}) {
   stdout
     ..writeln('* To restart press "r".')
-    ..writeln('  To quit, press "q" or "Q" for force quit.')
-    ..writeln('  To clear screen, press "s".');
+    ..writeln('  To quit, press "q" or "Q" to force quit.');
+
   if (detailed) {
-    stdout.writeln('  To quit, press "q" or "Q" for force quit.');
+    stdout.writeln('  To clear, press "s" or "S" to restart after.');
   } else {
     stdout.writeln('  For a more detailed help message, press "H".');
   }

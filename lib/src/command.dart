@@ -6,12 +6,8 @@ import 'package:fire/src/exception.dart';
 
 abstract class CliCommand extends Command<int> {
   CliCommand() {
-    argParser
-      ..addFlag('version', negatable: false, help: 'Print this tool version.')
-      ..addFlag('verbose',
-          abbr: 'v',
-          negatable: false,
-          help: 'Output more informational messages.');
+    argParser.addFlag('verbose',
+        negatable: false, help: 'Output more informational messages.');
   }
 
   @override
