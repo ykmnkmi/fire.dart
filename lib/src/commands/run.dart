@@ -6,36 +6,66 @@ import 'package:fire/src/command.dart';
 import 'package:fire/src/compiler.dart';
 import 'package:fire/src/exception.dart';
 import 'package:path/path.dart';
+import 'package:radix_tree/radix_tree.dart';
 import 'package:stream_transform/stream_transform.dart';
 import 'package:watcher/watcher.dart';
 
-enum CleanMode {
-  all,
-  incremental,
-  keep,
+extension on List<Mode> {
+  List<String> get names {
+    return <String>[for (var value in this) value.name];
+  }
+
+  Map<String, String> get describedMap {
+    return <String, String>{
+      for (var value in this) value.name: value.description,
+    };
+  }
 }
 
-enum RestartMode {
-  onEntryChanged,
-  manual,
+enum CleanMode implements Mode {
+  all('Delete all generated files.'),
+  incremental('Delete only incremental files.'),
+  keep('Keep all generated files.');
+
+  const CleanMode(this.description);
+
+  @override
+  final String description;
+
+  static CleanMode defaultMode = incremental;
+}
+
+enum RestartMode implements Mode {
+  onEntryChanged('Restart by watcher or manually.'),
+  manual('Restart manually.');
+
+  const RestartMode(this.description);
+
+  @override
+  final String description;
+
+  static RestartMode defaultMode = onEntryChanged;
 }
 
 class Run extends CliCommand {
   Run() {
     argParser
       ..addFlag('watch', abbr: 'w', help: 'Enable watcher.', negatable: false)
-      ..addFlag('watch-lib', help: "Watch 'lib' folder.", defaultsTo: true)
+      ..addMultiOption('watch-entry',
+          abbr: 'W', help: 'Entry to watch.', defaultsTo: <String>['lib'])
       ..addFlag('run-in-shell', help: 'Run in shell.', negatable: false)
       ..addOption('restart-mode',
           help: 'Watch restart mode.',
           valueHelp: 'mode',
-          allowed: <String>{'on-entry-changed', 'manual'},
+          allowed: RestartMode.values.names,
+          allowedHelp: RestartMode.values.describedMap,
           defaultsTo: 'on-entry-changed')
       ..addOption('clean',
           help: 'Clean produced files.',
           valueHelp: 'mode',
-          allowed: <String>{'keep', 'incremental', 'all'},
-          defaultsTo: 'incremental')
+          allowed: CleanMode.values.names,
+          allowedHelp: CleanMode.values.describedMap,
+          defaultsTo: CleanMode.defaultMode.name)
       ..addOption('output',
           abbr: 'o', help: 'Path to the kernel file.', valueHelp: 'file-path');
   }
@@ -55,43 +85,17 @@ class Run extends CliCommand {
     return '${super.invocation} <file-path>';
   }
 
-  bool get runInShell {
-    return getBoolean('run-in-shell');
-  }
+  late final bool runInShell = getBoolean('run-in-shell') ?? false;
 
-  bool get watch {
-    return getBoolean('watch');
-  }
+  late final bool watch = getBoolean('watch') ?? false;
 
-  bool get watchLib {
-    return getBoolean('watch-lib');
-  }
+  late final List<String> watchEntries = getStrings('watch-entry');
 
-  RestartMode get restartMode {
-    var restartMode = getString('restart-mode');
+  late final RestartMode restartMode = getMode<RestartMode>(
+      'restart-mode', RestartMode.values, RestartMode.defaultMode);
 
-    switch (restartMode) {
-      case 'on-entry-changed':
-        return RestartMode.onEntryChanged;
-      case 'manual':
-        return RestartMode.manual;
-      default:
-        throw UnsupportedError('RestartMode: $restartMode.');
-    }
-  }
-
-  CleanMode get clean {
-    var clean = getString('clean');
-
-    switch (clean) {
-      case 'incremental':
-        return CleanMode.incremental;
-      case 'all':
-        return CleanMode.all;
-      default:
-        throw UnsupportedError('CleanMode: $clean.');
-    }
-  }
+  late final CleanMode clean =
+      getMode<CleanMode>('clean', CleanMode.values, CleanMode.defaultMode);
 
   String get inputPath {
     var rest = argResults.rest;
@@ -244,16 +248,29 @@ class Run extends CliCommand {
 
     var restartOnInputChange = restartMode == RestartMode.onEntryChanged;
 
-    if (isWithin('bin', inputPath)) {
-      await watchFolder(group, 'bin');
-    } else if (isWithin('lib', inputPath)) {
-      await watchFolder(group, 'lib', printIfNotPossible: true);
-    } else if (watchLib && FileSystemEntity.isDirectorySync('lib')) {
-      await watchFolder(group, 'lib', printIfNotPossible: true);
-    } else if (isWithin('test', inputPath)) {
-      await watchFolder(group, 'test');
-    } else if (restartOnInputChange) {
-      await watchFile(group, inputPath);
+    {
+      var tree = RadixTree<String>();
+      tree[inputPath] = inputPath;
+
+      for (var entry in watchEntries) {
+        tree[entry] = entry;
+      }
+
+      // TODO(radix_tree): remove ignore
+      // ignore: invalid_use_of_internal_member
+      for (var node in tree.root.children) {
+        // TODO(radix_tree): remove ignore
+        // ignore: invalid_use_of_internal_member
+        var path = node.value!;
+
+        if (FileSystemEntity.isFileSync(path)) {
+          await watchFile(group, path);
+        } else if (FileSystemEntity.isDirectorySync(path)) {
+          await watchFolder(group, path);
+        } else {
+          throw CliException('Unsupported entry: $path');
+        }
+      }
     }
 
     int code;

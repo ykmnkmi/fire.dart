@@ -4,6 +4,10 @@ import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:fire/src/exception.dart';
 
+abstract class Mode implements Enum {
+  String get description;
+}
+
 abstract class CliCommand extends Command<int> {
   CliCommand() {
     argParser.addFlag('verbose',
@@ -11,26 +15,15 @@ abstract class CliCommand extends Command<int> {
   }
 
   @override
-  ArgResults get argResults {
-    var argResults = super.argResults;
+  late final ArgResults argResults =
+      super.argResults ?? fail('Command is not called.');
 
-    if (argResults == null) {
-      throw CliException('Command is not called.');
-    }
+  late final bool verbose = getBoolean('verbose') ?? false;
 
-    return argResults;
-  }
+  late final bool version = getBoolean('version') ?? false;
 
-  bool get verbose {
-    return getBoolean('verbose');
-  }
-
-  bool get version {
-    return getBoolean('version');
-  }
-
-  bool getBoolean(String name) {
-    return argResults[name] as bool? ?? false;
+  bool? getBoolean(String name) {
+    return argResults[name] as bool?;
   }
 
   int? getInteger(String name) {
@@ -45,6 +38,20 @@ abstract class CliCommand extends Command<int> {
 
   String? getString(String name) {
     return argResults[name] as String?;
+  }
+
+  T getMode<T extends Mode>(String name, List<T> values, T defaultValue) {
+    var result = getString(name);
+
+    if (result == null) {
+      return defaultValue;
+    }
+
+    return values.byName(result);
+  }
+
+  List<String> getStrings(String name) {
+    return argResults[name] as List<String>;
   }
 
   Future<int> handle();
@@ -63,5 +70,9 @@ abstract class CliCommand extends Command<int> {
     } finally {
       await cleanup();
     }
+  }
+
+  Never fail(String message) {
+    throw CliException(message);
   }
 }

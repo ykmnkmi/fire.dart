@@ -27,25 +27,15 @@ class Compile extends CliCommand {
     return '${super.invocation} <file-path>';
   }
 
-  String get inputPath {
-    var rest = argResults.rest;
+  late final String inputPath = argResults.rest.length == 1
+      ? argResults.rest.first
+      : usageException('Input path required.');
 
-    if (rest.length != 1) {
-      usageException('message');
-    }
-
-    return rest[0];
-  }
-
-  String get outputPath {
-    return getString('output') ?? setExtension(inputPath, '.dill');
-  }
+  late final String outputPath =
+      getString('output') ?? setExtension(inputPath, '.dill');
 
   @override
   Future<int> handle() async {
-    var inputPath = this.inputPath;
-    var outputPath = this.outputPath;
-
     var compiler = await Compiler.start(
       inputPath,
       outputPath,
