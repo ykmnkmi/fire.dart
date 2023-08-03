@@ -59,6 +59,8 @@ class Compiler {
   static Future<Compiler> start(
     String inputPath,
     String outputPath, {
+    String platform = 'lib/_internal/vm_platform_strong.dill',
+    String target = 'vm',
     bool verbose = false,
   }) async {
     var sdkRoot = dirname(dirname(Platform.resolvedExecutable));
@@ -78,9 +80,10 @@ class Compiler {
     var client = await FrontendServerClient.start(
       inputPath,
       outputPath,
-      'lib/_internal/vm_platform_strong.dill',
+      platform,
       packagesJson: packagesJsonPath,
       sdkRoot: sdkRoot,
+      target: target,
       verbose: verbose,
     );
 

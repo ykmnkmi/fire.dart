@@ -8,6 +8,18 @@ abstract class Mode implements Enum {
   String get description;
 }
 
+extension EnumValues on List<Mode> {
+  List<String> get names {
+    return <String>[for (var value in this) value.name];
+  }
+
+  Map<String, String> get describedMap {
+    return <String, String>{
+      for (var value in this) value.name: value.description,
+    };
+  }
+}
+
 abstract class CliCommand extends Command<int> {
   CliCommand() {
     argParser.addFlag('verbose',
@@ -40,7 +52,7 @@ abstract class CliCommand extends Command<int> {
     return argResults[name] as String?;
   }
 
-  T getMode<T extends Mode>(String name, List<T> values, T defaultValue) {
+  T getEnum<T extends Enum>(String name, List<T> values, T defaultValue) {
     var result = getString(name);
 
     if (result == null) {

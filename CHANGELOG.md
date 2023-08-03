@@ -1,6 +1,7 @@
-## 1.3.0-dev.10
+## 1.3.0
 
-- _work in progress_
+- Bump minimal SDK version to 3.0.
+- Internal changes.
 
 ## 1.2.2
 

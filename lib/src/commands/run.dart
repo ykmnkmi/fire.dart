@@ -10,18 +10,6 @@ import 'package:radix_tree/radix_tree.dart';
 import 'package:stream_transform/stream_transform.dart';
 import 'package:watcher/watcher.dart';
 
-extension on List<Mode> {
-  List<String> get names {
-    return <String>[for (var value in this) value.name];
-  }
-
-  Map<String, String> get describedMap {
-    return <String, String>{
-      for (var value in this) value.name: value.description,
-    };
-  }
-}
-
 enum CleanMode implements Mode {
   all('Delete all generated files.'),
   incremental('Delete only incremental files.'),
@@ -50,6 +38,7 @@ enum RestartMode implements Mode {
 class Run extends CliCommand {
   Run() {
     argParser
+      ..addSeparator('Run options:')
       ..addFlag('watch', abbr: 'w', help: 'Enable watcher.', negatable: false)
       ..addMultiOption('watch-entry',
           abbr: 'W', help: 'Entry to watch.', defaultsTo: <String>['lib'])
@@ -59,7 +48,7 @@ class Run extends CliCommand {
           valueHelp: 'mode',
           allowed: RestartMode.values.names,
           allowedHelp: RestartMode.values.describedMap,
-          defaultsTo: 'on-entry-changed')
+          defaultsTo: RestartMode.defaultMode.name)
       ..addOption('clean',
           help: 'Clean produced files.',
           valueHelp: 'mode',
@@ -91,11 +80,11 @@ class Run extends CliCommand {
 
   late final List<String> watchEntries = getStrings('watch-entry');
 
-  late final RestartMode restartMode = getMode<RestartMode>(
+  late final RestartMode restartMode = getEnum<RestartMode>(
       'restart-mode', RestartMode.values, RestartMode.defaultMode);
 
   late final CleanMode clean =
-      getMode<CleanMode>('clean', CleanMode.values, CleanMode.defaultMode);
+      getEnum<CleanMode>('clean', CleanMode.values, CleanMode.defaultMode);
 
   String get inputPath {
     var rest = argResults.rest;
@@ -279,7 +268,6 @@ class Run extends CliCommand {
       printRunModeUsage();
 
       Future<void> restart() async {
-        stdout.writeln('> Restarting ...');
         await compileKernel();
         await runKernel();
       }
@@ -293,10 +281,12 @@ class Run extends CliCommand {
               stdout.writeln('* Add ${event.path}');
               invalidatedPaths.add(event.path);
               break;
+
             case ChangeType.MODIFY:
               stdout.writeln('* Modify ${event.path}');
               invalidatedPaths.add(event.path);
               break;
+
             case ChangeType.REMOVE:
               stdout.writeln('* Remove ${event.path}');
               invalidatedPaths.remove(event.path);
@@ -359,6 +349,7 @@ class Run extends CliCommand {
         }
 
         continue incremental;
+
       incremental:
       case CleanMode.incremental:
         var file = File('$outputPath.incremental.dill');
@@ -368,6 +359,7 @@ class Run extends CliCommand {
         }
 
         return;
+
       case CleanMode.keep:
         // Do nothing.
         break;
@@ -418,7 +410,7 @@ void clearScreen() {
     stdout.write('\x1b[2J\x1b[H');
   } else if (Platform.isWindows) {
     // TODO(*): windows: reset buffer
-    stdout.writeln('* Not supported yet.');
+    stdout.writeln('* Not yet supported.');
   } else {
     stdout.writeln('* Not supported.');
   }
@@ -427,10 +419,10 @@ void clearScreen() {
 void printRunModeUsage({bool detailed = false}) {
   stdout
     ..writeln('* To restart press "r".')
-    ..writeln('  To quit, press "q" or "Q" to force quit.');
+    ..writeln('  Press "q" to quit or "Q" to force quit.');
 
   if (detailed) {
-    stdout.writeln('  To clear, press "s" or "S" to restart after.');
+    stdout.writeln('  Press "s" to clear or "S" to restart after.');
   } else {
     stdout.writeln('  For a more detailed help message, press "H".');
   }

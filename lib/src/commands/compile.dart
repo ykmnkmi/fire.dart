@@ -4,12 +4,30 @@ import 'package:fire/src/command.dart';
 import 'package:fire/src/compiler.dart';
 import 'package:path/path.dart';
 
+enum CompileTarget implements Mode {
+  vm('lib/_internal/vm_platform_strong.dill', 'VM compilation target');
+
+  const CompileTarget(this.platform, this.description);
+
+  final String platform;
+
+  @override
+  final String description;
+
+  static CompileTarget defaultMode = vm;
+}
+
 class Compile extends CliCommand {
   Compile() {
     argParser
       ..addSeparator('Compile options:')
       ..addOption('output',
-          abbr: 'o', help: 'Path to the output file.', valueHelp: 'file-path');
+          abbr: 'o', help: 'Path to the output file.', valueHelp: 'file-path')
+      ..addOption('target',
+          allowed: CompileTarget.values.names,
+          allowedHelp: CompileTarget.values.describedMap,
+          defaultsTo: CompileTarget.defaultMode.name,
+          hide: true);
   }
 
   @override
@@ -34,11 +52,16 @@ class Compile extends CliCommand {
   late final String outputPath =
       getString('output') ?? setExtension(inputPath, '.dill');
 
+  late final CompileTarget target =
+      getEnum('target', CompileTarget.values, CompileTarget.vm);
+
   @override
   Future<int> handle() async {
     var compiler = await Compiler.start(
       inputPath,
       outputPath,
+      platform: target.platform,
+      target: target.name,
       verbose: verbose,
     );
 
@@ -55,13 +78,10 @@ class Compile extends CliCommand {
       if (result.isCompiled) {
         stdout.writeln('* Compiling done, took ${timer.elapsed}');
       } else if (result.output.isEmpty) {
-        stdout
-          ..writeln('* Compiling done, no compilation result')
-          ..writeAll(result.output, '\n  ');
+        stdout.writeln('* Compiling done, no compilation result');
       } else {
-        stdout
-          ..writeln('* Compiling done, no compilation result:')
-          ..writeAll(result.output, '\n  ');
+        stdout.writeln('* Compiling done, no compilation result:');
+        stdout.writeAll(result.output, '\n');
       }
 
       await compiler.shutdown();
