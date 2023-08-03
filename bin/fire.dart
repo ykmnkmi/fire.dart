@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:fire/fire.dart';
+import 'package:fire/src/runner.dart';
 
 Future<void> main(List<String> args) async {
   exitCode = await FireCommandRunner().run(args);
