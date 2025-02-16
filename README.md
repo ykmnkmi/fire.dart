@@ -36,7 +36,7 @@ $ fire run -w bin/cat.dart example/example.dart
 > Compiling ...
 * Compiling done, took 0:00:00.424890
 void main() {
-  print('hello cat!');
+  print('hello world!');
 }
 
 * Watching 'bin' directory.

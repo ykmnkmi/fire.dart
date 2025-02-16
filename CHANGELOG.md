@@ -1,3 +1,8 @@
+## 1.4.0
+
+- Bump minimal SDK version to 3.0.
+- Internal changes.
+
 ## 1.3.1
 
 - Added package topics and platforms to the pubspec file.
