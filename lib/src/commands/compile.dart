@@ -21,13 +21,20 @@ class Compile extends CliCommand {
   Compile() {
     argParser
       ..addSeparator('Compile options:')
-      ..addOption('output',
-          abbr: 'o', help: 'Path to the output file.', valueHelp: 'file-path')
-      ..addOption('target',
-          allowed: CompileTarget.values.names,
-          allowedHelp: CompileTarget.values.describedMap,
-          defaultsTo: CompileTarget.defaultMode.name,
-          hide: true);
+      ..addOption(
+        'output',
+        abbr: 'o',
+        help: 'Path to the output file.',
+        valueHelp: 'file-path',
+      )
+      ..addOption(
+        'target',
+        allowed: CompileTarget.values.names,
+        allowedHelp: CompileTarget.values.describedMap,
+        defaultsTo: CompileTarget.defaultMode.name,
+        hide: true,
+      )
+      ..addFlag('quiet', negatable: false, help: 'Hide messages.');
   }
 
   @override
@@ -52,8 +59,13 @@ class Compile extends CliCommand {
   late final String outputPath =
       getString('output') ?? setExtension(inputPath, '.dill');
 
-  late final CompileTarget target =
-      getEnum('target', CompileTarget.values, CompileTarget.vm);
+  late final CompileTarget target = getEnum(
+    'target',
+    CompileTarget.values,
+    CompileTarget.vm,
+  );
+
+  late final bool notQuiet = !(getBoolean('quiet') ?? false);
 
   @override
   Future<int> handle() async {
@@ -62,7 +74,7 @@ class Compile extends CliCommand {
       outputPath,
       platform: target.platform,
       target: target.name,
-      verbose: verbose,
+      verbose: notQuiet && verbose,
     );
 
     var timer = Stopwatch();
@@ -76,12 +88,19 @@ class Compile extends CliCommand {
       timer.stop();
 
       if (result.isCompiled) {
-        stdout.writeln('* Compiling done, took ${timer.elapsed}');
+        if (notQuiet) {
+          stdout.writeln('* Compiling done, took ${timer.elapsed}');
+        }
       } else if (result.output.isEmpty) {
-        stdout.writeln('* Compiling done, no compilation result');
+        if (notQuiet) {
+          stdout.writeln('* Compiling done, no compilation result');
+        }
       } else {
-        stdout.writeln('* Compiling done, no compilation result:');
-        stdout.writeAll(result.output, '\n');
+        if (notQuiet) {
+          stdout
+            ..writeln('* Compiling done, no compilation result:')
+            ..writeAll(result.output, '\n');
+        }
       }
 
       await compiler.shutdown();

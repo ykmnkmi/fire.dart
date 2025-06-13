@@ -22,8 +22,11 @@ extension EnumValues on List<Mode> {
 
 abstract class CliCommand extends Command<int> {
   CliCommand() {
-    argParser.addFlag('verbose',
-        negatable: false, help: 'Output more informational messages.');
+    argParser.addFlag(
+      'verbose',
+      negatable: false,
+      help: 'Output more informational messages.',
+    );
   }
 
   @override

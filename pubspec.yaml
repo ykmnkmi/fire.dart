@@ -1,14 +1,14 @@
 name: fire
 description: >
   Hot-Restart for Dart console application with fast incremental compilation.
-version: 1.4.0
+version: 1.5.0
 repository: https://github.com/ykmnkmi/fire.dart
 
 executables:
   fire: fire
 
 environment:
-  sdk: ">=3.7.0 <4.0.0"
+  sdk: ">=3.8.0 <4.0.0"
 
 platforms:
   linux:
@@ -21,14 +21,14 @@ topics:
   - hot-restart
 
 dependencies:
-  args: ^2.6.0
+  args: ^2.7.0
   async: ^2.13.0
   frontend_server_client: ^4.0.0
-  package_config: ^2.1.1
+  package_config: ^2.2.0
   path: ^1.9.1
   radix_tree: ^2.2.0
   stream_transform: ^2.1.1
-  watcher: ^1.1.1
+  watcher: ^1.1.2
 
 dev_dependencies:
-  lints: ^5.1.1
+  lints: ^6.0.0

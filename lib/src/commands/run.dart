@@ -40,23 +40,35 @@ class Run extends CliCommand {
     argParser
       ..addSeparator('Run options:')
       ..addFlag('watch', abbr: 'w', help: 'Enable watcher.', negatable: false)
-      ..addMultiOption('watch-entry',
-          abbr: 'W', help: 'Entry to watch.', defaultsTo: <String>['lib'])
+      ..addMultiOption(
+        'watch-entry',
+        abbr: 'W',
+        help: 'Entry to watch.',
+        defaultsTo: <String>['lib'],
+      )
       ..addFlag('run-in-shell', help: 'Run in shell.', negatable: false)
-      ..addOption('restart-mode',
-          help: 'Watch restart mode.',
-          valueHelp: 'mode',
-          allowed: RestartMode.values.names,
-          allowedHelp: RestartMode.values.describedMap,
-          defaultsTo: RestartMode.defaultMode.name)
-      ..addOption('clean',
-          help: 'Clean produced files.',
-          valueHelp: 'mode',
-          allowed: CleanMode.values.names,
-          allowedHelp: CleanMode.values.describedMap,
-          defaultsTo: CleanMode.defaultMode.name)
-      ..addOption('output',
-          abbr: 'o', help: 'Path to the kernel file.', valueHelp: 'file-path');
+      ..addOption(
+        'restart-mode',
+        help: 'Watch restart mode.',
+        valueHelp: 'mode',
+        allowed: RestartMode.values.names,
+        allowedHelp: RestartMode.values.describedMap,
+        defaultsTo: RestartMode.defaultMode.name,
+      )
+      ..addOption(
+        'clean',
+        help: 'Clean produced files.',
+        valueHelp: 'mode',
+        allowed: CleanMode.values.names,
+        allowedHelp: CleanMode.values.describedMap,
+        defaultsTo: CleanMode.defaultMode.name,
+      )
+      ..addOption(
+        'output',
+        abbr: 'o',
+        help: 'Path to the kernel file.',
+        valueHelp: 'file-path',
+      );
   }
 
   @override
@@ -81,10 +93,16 @@ class Run extends CliCommand {
   late final List<String> watchEntries = getStrings('watch-entry');
 
   late final RestartMode restartMode = getEnum<RestartMode>(
-      'restart-mode', RestartMode.values, RestartMode.defaultMode);
+    'restart-mode',
+    RestartMode.values,
+    RestartMode.defaultMode,
+  );
 
-  late final CleanMode clean =
-      getEnum<CleanMode>('clean', CleanMode.values, CleanMode.defaultMode);
+  late final CleanMode clean = getEnum<CleanMode>(
+    'clean',
+    CleanMode.values,
+    CleanMode.defaultMode,
+  );
 
   String get inputPath {
     var rest = argResults.rest;
@@ -159,8 +177,9 @@ class Run extends CliCommand {
             ..writeAll(result.output, '\n  ');
         }
       } catch (error, stackTrace) {
-        stdout.writeln(error);
-        stdout.writeln(stackTrace);
+        stdout
+          ..writeln(error)
+          ..writeln(stackTrace);
       }
 
       timer.reset();
@@ -217,7 +236,7 @@ class Run extends CliCommand {
       stdin.echoMode = false;
       stdin.lineMode = false;
     } on StdinException {
-      // TODO(*): log error
+      // TODO(*): log error.
     }
 
     void restoreStdinMode() {
@@ -228,7 +247,7 @@ class Run extends CliCommand {
           stdin.echoMode = previousEchoMode;
         }
       } on StdinException {
-        // TODO(*): log error
+        // TODO(*): log error.
       }
     }
 
@@ -245,10 +264,10 @@ class Run extends CliCommand {
         tree[entry] = entry;
       }
 
-      // TODO(radix_tree): remove ignore
+      // TODO(radix_tree): remove ignore.
       // ignore: invalid_use_of_internal_member
       for (var node in tree.root.children) {
-        // TODO(radix_tree): remove ignore
+        // TODO(radix_tree): remove ignore.
         // ignore: invalid_use_of_internal_member
         var path = node.value!;
 
@@ -409,7 +428,7 @@ void clearScreen() {
   if (stdout.supportsAnsiEscapes) {
     stdout.write('\x1b[2J\x1b[H');
   } else if (Platform.isWindows) {
-    // TODO(*): windows: reset buffer
+    // TODO(*): windows: reset buffer.
     stdout.writeln('* Not yet supported.');
   } else {
     stdout.writeln('* Not supported.');

@@ -1,6 +1,12 @@
+## 1.5.0
+
+- Bump minimal SDK version to 3.8.
+- Add `quiet` option to `compile` command.
+- Internal changes.
+
 ## 1.4.0
 
-- Bump minimal SDK version to 3.0.
+- Bump minimal SDK version to 3.7.
 - Internal changes.
 
 ## 1.3.1
