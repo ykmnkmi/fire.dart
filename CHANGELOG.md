@@ -1,3 +1,7 @@
+## 1.5.1
+
+- Fix package config resolving.
+
 ## 1.5.0
 
 - Bump minimal SDK version to 3.8.

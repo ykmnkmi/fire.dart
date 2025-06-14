@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:frontend_server_client/frontend_server_client.dart';
-import 'package:package_config/package_config.dart';
 import 'package:path/path.dart';
 
 class CompilerResult {
@@ -64,24 +63,23 @@ class Compiler {
     bool verbose = false,
   }) async {
     var sdkRoot = dirname(dirname(Platform.resolvedExecutable));
+    var packageConfig = join('.dart_tool', 'package_config.json');
 
-    var fileUri = toUri(absolute(inputPath));
-    var packageConfig = await findPackageConfigUri(fileUri, loader: loader);
+    var directory = Directory(dirname(inputPath));
 
-    if (packageConfig == null) {
-      throw ArgumentError.value(inputPath, 'inputPath');
+    while (directory.parent.path != directory.path) {
+      if (File(join(directory.path, packageConfig)).existsSync()) {
+        packageConfig = join(directory.path, packageConfig);
+      }
+
+      directory = directory.parent;
     }
-
-    var package = packageConfig.packages.last;
-    var packageRootPath = relative(fromUri(package.root));
-    var packageConfigPath = join('.dart_tool', 'package_config.json');
-    var packagesJsonPath = join(packageRootPath, packageConfigPath);
 
     var client = await FrontendServerClient.start(
       inputPath,
       outputPath,
       platform,
-      packagesJson: packagesJsonPath,
+      packagesJson: packageConfig,
       sdkRoot: sdkRoot,
       target: target,
       verbose: verbose,
